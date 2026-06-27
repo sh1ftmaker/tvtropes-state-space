@@ -4,6 +4,8 @@ Embed all **30,984 TVTropes** by meaning with **`gemini-embedding-2`**, arrange
 them by similarity, and explore the resulting "state space" in an interactive
 WebGL demo.
 
+### ▶ Live demo: https://sh1ftmaker.github.io/tvtropes-state-space/
+
 ![demo](out/gemini_sacrifice.png)
 
 ## What it does
