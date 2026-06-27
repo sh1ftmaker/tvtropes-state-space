@@ -11,6 +11,8 @@ data/
 # generated artifacts (88MB matrix, 30k per-id cache, served copy)
 out/embeddings_gemini.npz
 out/embeddings_gemini.json
+out/embeddings_genres.npz
+out/embeddings_genres.json
 out/embeddings_local.npz
 out/embeddings_gemini_cache/
 out/_smoke.npz

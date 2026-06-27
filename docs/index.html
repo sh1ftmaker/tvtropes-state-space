@@ -106,7 +106,7 @@
 
 <div id="title" class="hud">
   <h1>TVTropes State Space</h1>
-  <p>30,984 narrative tropes embedded by meaning &amp; arranged by similarity. Drag / pinch / scroll to explore, tap or click a star to trace its nearest neighbors.</p>
+  <p>30,984 narrative tropes arranged by genre &amp; setting and colored by dominant genre. Drag / pinch / scroll to explore, tap or click a star to trace its nearest neighbors.</p>
   <span class="badge" id="modelBadge">embedding: …</span>
   <div id="nav"><a href="index.html" class="on">2D map</a><a href="3d.html">3D flythrough ▸</a></div>
 </div>
@@ -114,7 +114,8 @@
 <div id="controls" class="hud panel">
   <h2>Color by</h2>
   <div class="seg" id="colorModes">
-    <button data-m="cluster" class="on">Semantic</button>
+    <button data-m="genre" class="on">Genre</button>
+    <button data-m="cluster">Semantic</button>
     <button data-m="media">Media</button>
     <button data-m="gender">Gender</button>
   </div>
@@ -130,7 +131,7 @@
 </div>
 
 <div id="legend" class="hud panel">
-  <h2 id="legendTitle">Semantic clusters</h2>
+  <h2 id="legendTitle">Genre</h2>
   <div id="legendBody"></div>
 </div>
 
@@ -155,9 +156,9 @@ const PALETTE = ["#7cf2d6","#ff8fab","#ffd166","#8ecae6","#c792ea","#80ed99","#f
 const MEDIA_COLORS = {film:"#8ecae6", tv:"#ff8fab", lit:"#ffd166", unused:"#566", unus:"#566"};
 const hexRGB = h=>{const n=parseInt(h.slice(1),16);return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];};
 
-let DATA=null, N=0, POS, POS3, COL, SIZE, NAMES, META, NN, GRID;
+let DATA=null, N=0, POS, POS3, COL, SIZE, NAMES, META, NN, GRID, SUPER=[];
 let view={s:0.9, tx:0, ty:0}; // world->clip scale & translate
-let colorMode="cluster", sizeMode="pop", glow=0.6, sel=-1, hover=-1;
+let colorMode="genre", sizeMode="pop", glow=0.6, sel=-1, hover=-1;
 let dpr=Math.min(window.devicePixelRatio||1, 2);
 
 const glc=document.getElementById('gl'), fxc=document.getElementById('fx');
@@ -167,6 +168,7 @@ const fx=fxc.getContext('2d');
 // ---------- load ----------
 fetch('points.json').then(r=>r.json()).then(d=>{
   DATA=d; const P=d.points; N=P.length;
+  SUPER=(d.meta.supergenres||[]).map(s=>({label:s.label, color:s.color}));
   POS=new Float32Array(N*2); POS3=new Float32Array(N*3);
   COL=new Float32Array(N*3); SIZE=new Float32Array(N);
   NAMES=new Array(N); META=new Array(N); NN=new Array(N);
@@ -210,7 +212,8 @@ function recomputeColors(){
   let mx=0; for(let i=0;i<N;i++) mx=Math.max(mx,META[i].tot);
   for(let i=0;i<N;i++){
     let c;
-    if(colorMode==="cluster"){ c=hexRGB(PALETTE[META[i].c%PALETTE.length]); }
+    if(colorMode==="genre"){ const s=SUPER[META[i].sg]; c=hexRGB(s?s.color:"#566"); }
+    else if(colorMode==="cluster"){ c=hexRGB(PALETTE[META[i].c%PALETTE.length]); }
     else if(colorMode==="media"){ c=hexRGB(MEDIA_COLORS[META[i].media]||"#566"); }
     else { // gender: diverging  female(-?) <-> male; ratio in [-1,1] (neg=male-skew)
       const g=META[i].g;
@@ -417,7 +420,10 @@ function hoverTrope(i,px,py){
   if(i<0){tip.style.display='none';glc.style.cursor='grab';return;}
   glc.style.cursor='pointer';
   const m=META[i];
-  tip.innerHTML='<b>'+esc(NAMES[i])+'</b><p>'+esc(m.d||'')+'</p>';
+  const sg=SUPER[m.sg];
+  tip.innerHTML='<b>'+esc(NAMES[i])+'</b>'+
+    (m.gen?'<p style="color:'+(sg?sg.color:'#9aa0b8')+'">'+esc(m.gen)+(sg?' · '+esc(sg.label):'')+'</p>':'')+
+    '<p>'+esc(m.d||'')+'</p>';
   tip.style.display='block';
   const w=tip.offsetWidth,h=tip.offsetHeight;
   tip.style.left=Math.min(px+14, innerWidth-w-8)+'px';
@@ -429,9 +435,12 @@ function selectTrope(i){
   const m=META[i];
   document.getElementById('card').classList.add('show');
   document.getElementById('cTitle').textContent=spaceCase(NAMES[i]);
+  const sg=SUPER[m.sg];
   document.getElementById('cSub').textContent=
-    `cluster ${m.c} · ${m.media} · seen ${m.tot.toLocaleString()}× (film ${m.nf}, tv ${m.nt}, lit ${m.nl})`;
+    `${m.gen||'—'} · cluster ${m.c} · ${m.media} · seen ${m.tot.toLocaleString()}× (film ${m.nf}, tv ${m.nt}, lit ${m.nl})`;
   const pills=[];
+  if(sg) pills.push(pill(sg.label, sg.color));
+  if(m.gen) pills.push(pill(m.gen, sg?sg.color:'#7cf2d6'));
   pills.push(pill('film '+m.nf, MEDIA_COLORS.film));
   pills.push(pill('tv '+m.nt, MEDIA_COLORS.tv));
   pills.push(pill('lit '+m.nl, MEDIA_COLORS.lit));
@@ -481,7 +490,10 @@ search.oninput=()=>{
 // ---------- legend ----------
 function buildLegend(){
   const t=document.getElementById('legendTitle'), b=document.getElementById('legendBody');
-  if(colorMode==='cluster'){ t.textContent='Semantic clusters';
+  if(colorMode==='genre'){ t.textContent='Genre';
+    b.innerHTML=SUPER.map(s=>
+      `<div class="lg"><span class="sw" style="background:${s.color}"></span>${esc(s.label)}</div>`).join(''); }
+  else if(colorMode==='cluster'){ t.textContent='Semantic clusters';
     b.innerHTML='<div class="lg">'+ (DATA?DATA.meta.clusters:24) +' k-means groups in embedding space.</div>'+
       '<div class="lg">Nearby color = related meaning.</div>'; }
   else if(colorMode==='media'){ t.textContent='Dominant medium';

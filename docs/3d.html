@@ -100,14 +100,15 @@
 
 <div id="title" class="hud">
   <h1>TVTropes State Space · 3D</h1>
-  <p>Fly through 30,984 tropes. Tap a star to trace its semantic links; remap the X/Y/Z axes to regroup the cloud by any metric.</p>
+  <p>Fly through 30,984 tropes laid out by genre &amp; setting. Tap a star to trace its closest tropes; remap the X/Y/Z axes — try Genre · Fantasy / Horror / Sci-Fi — to regroup the cloud.</p>
   <div id="nav"><a href="index.html">2D map</a><a href="3d.html" class="on">3D flythrough</a></div>
 </div>
 
 <div id="controls" class="hud panel">
   <h2>Color by</h2>
   <div class="seg" id="colorModes">
-    <button data-m="cluster" class="on">Semantic</button>
+    <button data-m="genre" class="on">Genre</button>
+    <button data-m="cluster">Semantic</button>
     <button data-m="media">Media</button>
     <button data-m="gender">Gender</button>
   </div>
@@ -139,7 +140,7 @@
 </div>
 
 <div id="legend" class="hud panel">
-  <h2 id="legendTitle">Semantic clusters</h2>
+  <h2 id="legendTitle">Genre</h2>
   <div id="legendBody"></div>
 </div>
 
@@ -171,13 +172,14 @@ const SCALE = 60;
 const isTouch = matchMedia('(pointer:coarse)').matches;
 
 let N=0, NAME, DESC, CL, MEDIA, TOT, NF, NT, NL, G, NN, KC=24;
+let SG, GEN, SUPER=[];  // per-point dominant supergenre id, dominant genre name, palette
 let AX = {};            // metric -> Float32Array in [-1,1]
 let cur, tgt;           // live + target positions (N*3), world units
-let colorMode="cluster", connMode="sel", glow=0.6;
+let colorMode="genre", connMode="sel", glow=0.6;
 let sel=-1, morphing=false;
 
 const AXIS_OPTIONS = [
-  ["umap1","Semantic axis 1"],["umap2","Semantic axis 2"],["umap3","Semantic axis 3"],
+  ["umap1","Genre map 1"],["umap2","Genre map 2"],["umap3","Genre map 3"],
   ["pop","Popularity"],["gender","Genderedness"],["cluster","Cluster id"],
   ["film","Film share"],["tv","TV share"],["lit","Literature share"],["flat","Flat (0)"],
 ];
@@ -211,9 +213,10 @@ function makeRingTexture(){
 // ---------------- load ----------------
 fetch('points.json').then(r=>r.json()).then(d=>{
   const P=d.points; N=P.length; KC=d.meta.clusters||24;
+  SUPER=(d.meta.supergenres||[]).map(s=>({label:s.label, color:s.color}));
   NAME=new Array(N); DESC=new Array(N); CL=new Int16Array(N); MEDIA=new Array(N);
   TOT=new Float32Array(N); NF=new Int32Array(N); NT=new Int32Array(N); NL=new Int32Array(N);
-  G=new Array(N); NN=new Array(N);
+  G=new Array(N); NN=new Array(N); SG=new Int16Array(N); GEN=new Array(N);
   const um1=new Float32Array(N),um2=new Float32Array(N),um3=new Float32Array(N);
   const ff=new Float32Array(N),ft=new Float32Array(N),fl=new Float32Array(N);
   const pop=new Float32Array(N),gen=new Float32Array(N),clu=new Float32Array(N);
@@ -221,6 +224,7 @@ fetch('points.json').then(r=>r.json()).then(d=>{
   for(let i=0;i<N;i++){const p=P[i];
     NAME[i]=p.name; DESC[i]=p.d||''; CL[i]=p.c; MEDIA[i]=p.media;
     TOT[i]=p.tot; NF[i]=p.nf; NT[i]=p.nt; NL[i]=p.nl; G[i]=(p.g==null?null:p.g); NN[i]=p.nn;
+    SG[i]=(p.sg==null?-1:p.sg); GEN[i]=p.gen||'';
     um1[i]=p.x3; um2[i]=p.y3; um3[i]=p.z3;
     const tot=Math.max(p.nf+p.nt+p.nl,1);
     ff[i]=p.nf/tot*2-1; ft[i]=p.nt/tot*2-1; fl[i]=p.nl/tot*2-1;
@@ -231,6 +235,12 @@ fetch('points.json').then(r=>r.json()).then(d=>{
   for(let i=0;i<N;i++) pop[i]=pop[i]/(maxLP||1)*2-1;
   AX={umap1:um1,umap2:um2,umap3:um3,film:ff,tv:ft,lit:fl,pop,gender:gen,cluster:clu,
       flat:new Float32Array(N)};
+  // per-supergenre affinity axes (p.sa is 0..1) -> remappable [-1,1] axes so the
+  // user can set X=Fantasy, Y=Horror, Z=Sci-Fi and watch tropes regroup by genre.
+  const NS=SUPER.length;
+  for(let k=0;k<NS;k++){const a=new Float32Array(N);
+    for(let i=0;i<N;i++){const sa=P[i].sa; a[i]=sa?sa[k]*2-1:0;}
+    AX['sg'+k]=a; AXIS_OPTIONS.push(['sg'+k,'Genre · '+SUPER[k].label]);}
   buildUI(); buildScene(); buildControls();
   document.getElementById('loading').style.display='none';
   animate();
@@ -300,7 +310,8 @@ function startMorph(){ computeTarget(); morphing=true; if(edgesAll) edgesAll.vis
 function recomputeColors(){
   const c=colAttr.array;
   for(let i=0;i<N;i++){ let col;
-    if(colorMode==="cluster") col=hexRGB(PALETTE[CL[i]%PALETTE.length]);
+    if(colorMode==="genre"){ const s=SUPER[SG[i]]; col=hexRGB(s?s.color:"#566"); }
+    else if(colorMode==="cluster") col=hexRGB(PALETTE[CL[i]%PALETTE.length]);
     else if(colorMode==="media") col=hexRGB(MEDIA_COLORS[MEDIA[i]]||"#566");
     else { const g=G[i];
       if(g==null) col=[0.32,0.34,0.42];
@@ -379,9 +390,13 @@ function selectTrope(i){
   sel=i;
   const card=document.getElementById('card'); card.classList.add('show');
   document.getElementById('cTitle').textContent=spaceCase(NAME[i]);
+  const sg=SUPER[SG[i]];
   document.getElementById('cSub').textContent=
-    `cluster ${CL[i]} · ${MEDIA[i]} · seen ${TOT[i].toLocaleString()}× (film ${NF[i]}, tv ${NT[i]}, lit ${NL[i]})`;
-  const pills=[pill('film '+NF[i],MEDIA_COLORS.film),pill('tv '+NT[i],MEDIA_COLORS.tv),pill('lit '+NL[i],MEDIA_COLORS.lit)];
+    `${GEN[i]||'—'} · cluster ${CL[i]} · ${MEDIA[i]} · seen ${TOT[i].toLocaleString()}× (film ${NF[i]}, tv ${NT[i]}, lit ${NL[i]})`;
+  const pills=[];
+  if(sg) pills.push(pill(sg.label, sg.color));
+  if(GEN[i]) pills.push(pill(GEN[i], sg?sg.color:'#7cf2d6'));
+  pills.push(pill('film '+NF[i],MEDIA_COLORS.film),pill('tv '+NT[i],MEDIA_COLORS.tv),pill('lit '+NL[i],MEDIA_COLORS.lit));
   if(G[i]!=null) pills.push(pill('gender '+G[i], G[i]<0?'#8ecae6':'#ff8fab'));
   document.getElementById('cPills').innerHTML=pills.join('');
   document.getElementById('cDesc').textContent=DESC[i]||'(no description)';
@@ -471,7 +486,9 @@ function buildUI(){
 }
 function buildLegend(){
   const t=document.getElementById('legendTitle'), b=document.getElementById('legendBody');
-  if(colorMode==='cluster'){ t.textContent='Semantic clusters';
+  if(colorMode==='genre'){ t.textContent='Genre';
+    b.innerHTML=SUPER.map(s=>`<div class="lg"><span class="sw" style="background:${s.color}"></span>${esc(s.label)}</div>`).join(''); }
+  else if(colorMode==='cluster'){ t.textContent='Semantic clusters';
     b.innerHTML=`<div class="lg">${KC} k-means groups · nearby color = related meaning.</div>`; }
   else if(colorMode==='media'){ t.textContent='Dominant medium';
     b.innerHTML=['film','tv','lit','unused'].map(k=>`<div class="lg"><span class="sw" style="background:${MEDIA_COLORS[k]}"></span>${k}</div>`).join(''); }
