@@ -33,6 +33,13 @@ WebGL demo.
     including a per-supergenre affinity axis each (set X=Fantasy, Y=Horror, Z=Sci-Fi
     to regroup the cloud), plus genre-map axes, film/tv/lit share, popularity,
     genderedness, cluster; set Z=flat for a 2D arrangement to compare.
+  - **Trope Craft** (`craft.html`): an [Infinite Craft](https://neal.fun/infinite-craft/)-style
+    game. Drag two ingredients together and the result is whichever trope sits
+    nearest the *sum* of their vectors — fully offline, no LLM. Start from 76
+    narrative "words" (Hero, Sword, Betrayal…) + the 107 genres, craft them into
+    tropes, then combine tropes for deeper ones (Sword+Magic→SpellBlade,
+    Love+Betrayal→RevengeRomance, Cyberpunk+Detective→StreetSamurai). Chips are
+    colored by genre; discoveries persist in localStorage.
 
 ## Pipeline
 ```
@@ -48,10 +55,18 @@ out/embeddings_gemini.npz             # (30984, 768) float32, L2-normalized
 out/embeddings_genres.npz             # (~110, 768) genre vectors
         │  project.py  (genre-affinity → UMAP 2D/3D + KMeans + semantic kNN)
         ▼
-out/points.json                       # everything the demo needs
-        │  index.html  (WebGL)
+out/points.json                       # everything the 2D/3D demos need
+        │  index.html / 3d.html  (WebGL)
         ▼
 http://localhost:8731                 # interactive state space
+
+out/embeddings_gemini.npz + embeddings_words.npz (words.py) + embeddings_genres.npz
+        │  build_craft.py  (PCA->48d, int8-quantized, base64)
+        ▼
+out/craft.json                        # 2.9MB: trope vectors + word/genre ingredients
+        │  craft.html
+        ▼
+Trope Craft                           # offline crafting game
 ```
 
 ## Reproduce
@@ -72,7 +87,13 @@ python src/embed_genres.py --out out/embeddings_genres.npz --sa sa.json --locati
 python src/project.py --emb out/embeddings_gemini.npz \
     --feat out/trope_features.parquet --genres out/embeddings_genres.npz --out out
 
-# 5. view
+# 5. crafting game data (words taxonomy -> same model, then PCA-reduced payload)
+python src/embed_words.py --out out/embeddings_words.npz --sa sa.json --location global
+python src/build_craft.py --emb out/embeddings_gemini.npz --points out/points.json \
+    --words out/embeddings_words.npz --genres out/embeddings_genres.npz \
+    --out out/craft.json --dim 48
+
+# 6. view
 cd out && python -m http.server 8731    # open http://localhost:8731
 ```
 

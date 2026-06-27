@@ -13,6 +13,9 @@ out/embeddings_gemini.npz
 out/embeddings_gemini.json
 out/embeddings_genres.npz
 out/embeddings_genres.json
+out/embeddings_words.npz
+out/embeddings_words.json
+out/craft.json
 out/embeddings_local.npz
 out/embeddings_gemini_cache/
 out/_smoke.npz

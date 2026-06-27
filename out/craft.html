@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Trope Craft — TVTropes State Space</title>
+<style>
+  :root{
+    --bg:#06070d; --panel:rgba(16,18,28,.86); --line:rgba(255,255,255,.08);
+    --txt:#e7e9f3; --dim:#9aa0b8; --accent:#7cf2d6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;
+    overscroll-behavior:none;-webkit-text-size-adjust:100%;-webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent}
+  #board{position:fixed;inset:0;z-index:1;overflow:hidden;touch-action:none;
+    background:
+      radial-gradient(1200px 700px at 30% -10%, rgba(124,242,214,.05), transparent 60%),
+      radial-gradient(900px 600px at 100% 110%, rgba(139,92,246,.06), transparent 60%)}
+  .hud{position:fixed;z-index:5}
+  .panel{background:var(--panel);backdrop-filter:blur(9px);border:1px solid var(--line);
+    border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  /* ---- title / nav ---- */
+  #title{top:14px;left:16px;max-width:380px}
+  #title h1{margin:0;font-size:15px;letter-spacing:.3px;font-weight:650}
+  #title p{margin:3px 0 0;color:var(--dim);font-size:11.5px}
+  #nav{margin-top:8px;display:flex;gap:6px}
+  #nav a{font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:20px;
+    color:var(--dim);text-decoration:none}
+  #nav a.on{background:var(--accent);color:#04130f;border-color:var(--accent);font-weight:600}
+  /* ---- sidebar palette ---- */
+  #side{top:14px;right:16px;bottom:14px;width:248px;display:flex;flex-direction:column;padding:12px 12px 10px}
+  #side h2{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--dim);
+    display:flex;justify-content:space-between;align-items:baseline}
+  #side h2 span{color:var(--accent);font-weight:600;letter-spacing:.3px}
+  #search{width:100%;padding:7px 9px;background:rgba(0,0,0,.3);border:1px solid var(--line);
+    border-radius:8px;color:var(--txt);font-size:12px;outline:none;margin-bottom:8px}
+  #search:focus{border-color:var(--accent)}
+  #pal{flex:1;overflow:auto;display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;padding-right:2px}
+  #pal .ghead{flex-basis:100%;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;
+    margin:7px 0 1px}
+  #pal .ghead:first-child{margin-top:0}
+  .item{display:inline-flex;align-items:center;gap:6px;padding:4px 9px 4px 8px;border-radius:16px;
+    border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:grab;font-size:11.5px;
+    color:var(--txt);white-space:nowrap;max-width:100%;transition:transform .06s,border-color .12s}
+  .item:hover{border-color:rgba(255,255,255,.28)}
+  .item:active{cursor:grabbing}
+  .item .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .item .nm{overflow:hidden;text-overflow:ellipsis}
+  #side .foot{margin-top:8px;display:flex;gap:6px}
+  #side .foot button{flex:1;padding:6px;border:1px solid var(--line);background:transparent;color:var(--dim);
+    border-radius:8px;cursor:pointer;font-size:11px}
+  #side .foot button:hover{color:var(--txt);border-color:rgba(255,255,255,.25)}
+  /* ---- board chips ---- */
+  .chip{position:absolute;display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:20px;
+    border:1px solid var(--line);color:var(--txt);font-size:13px;cursor:grab;touch-action:none;
+    box-shadow:0 4px 16px rgba(0,0,0,.4);white-space:nowrap;will-change:transform;z-index:2}
+  .chip .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .chip.drag{cursor:grabbing;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+  .chip.hot{outline:2px solid var(--accent);outline-offset:1px}
+  .chip.spawn{animation:pop .26s cubic-bezier(.2,1.4,.5,1)}
+  @keyframes pop{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
+  .chip .kk{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+  /* ---- toast ---- */
+  #toasts{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9;display:flex;
+    flex-direction:column;gap:7px;align-items:center;pointer-events:none}
+  .toast{padding:8px 15px;border-radius:22px;font-size:12.5px;border:1px solid var(--line);
+    background:rgba(8,9,15,.94);box-shadow:0 8px 26px rgba(0,0,0,.5);animation:tin .3s ease, tout .4s ease 2.6s forwards}
+  .toast b{font-weight:650}
+  .toast .new{color:#04130f;background:var(--accent);padding:1px 7px;border-radius:10px;font-size:10px;
+    font-weight:700;margin-right:7px;letter-spacing:.5px}
+  @keyframes tin{from{transform:translateY(-12px);opacity:0}}
+  @keyframes tout{to{transform:translateY(-8px);opacity:0}}
+  /* ---- hint ---- */
+  #hint{bottom:16px;left:16px;color:var(--dim);font-size:11.5px;max-width:300px}
+  #hint b{color:var(--txt)}
+  a.src{color:var(--accent);text-decoration:none}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+    background:var(--bg);flex-direction:column;gap:14px}
+  #loading .spin{width:34px;height:34px;border:3px solid rgba(255,255,255,.12);
+    border-top-color:var(--accent);border-radius:50%;animation:s 1s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  /* ---- mobile ---- */
+  #palToggle{display:none}
+  @media (max-width:680px){
+    #title{top:8px;left:10px;right:120px;max-width:none}
+    #title h1{font-size:13px}#title p{display:none}
+    #nav{position:fixed;top:8px;right:10px;margin:0;z-index:8}
+    #side{top:auto;bottom:0;left:0;right:0;width:auto;border-radius:14px 14px 0 0;max-height:42vh;
+      transition:transform .25s}
+    #side.closed{transform:translateY(calc(100% - 42px))}
+    #pal{max-height:24vh}
+    #palToggle{display:block;position:absolute;top:-1px;right:12px;background:none;border:none;
+      color:var(--dim);font-size:11px;cursor:pointer;padding:10px 0;z-index:2}
+    #side h2 #count{display:none}
+    #hint{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="board"></div>
+
+<div id="title" class="hud">
+  <h1>Trope Craft</h1>
+  <p>Drag two ingredients together to craft the TVTrope nearest their blend. Combine tropes for deeper ones.</p>
+  <div id="nav">
+    <a href="index.html">2D map</a>
+    <a href="3d.html">3D flythrough</a>
+    <a href="craft.html" class="on">Craft</a>
+  </div>
+</div>
+
+<div id="side" class="hud panel">
+  <button id="palToggle">palette ▴</button>
+  <h2>Ingredients <span id="count">0 found</span></h2>
+  <input id="search" placeholder="search words, genres, tropes…" autocomplete="off" />
+  <div id="pal"></div>
+  <div class="foot">
+    <button id="clearBoard">Clear board</button>
+    <button id="resetAll">Reset</button>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<div id="hint" class="hud">
+  <b>Drag</b> an ingredient onto another to craft. <b>Tap</b> the list to drop one on the board.
+  Crafted tropes join your palette — combine them to go deeper.
+</div>
+
+<div id="loading"><div class="spin"></div><div>building the workbench…</div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+function hexA(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+
+let DIM, SCALE, V, NAMES, SG, SUPER, ELEMS, NAME2IDX, RECIPES={}, DISCOVERED;
+const KEY_DISC='tvtropes-craft-discovered-v1', KEY_REC='tvtropes-craft-recipes-v1';
+
+async function boot(){
+  const d=await (await fetch('craft.json')).json();
+  DIM=d.dim; SCALE=d.scale; SUPER=d.supergenres;
+  NAMES=d.tropes.names; SG=d.tropes.sg;
+  // decode int8 trope matrix -> normalized Float32 rows
+  const raw=atob(d.tropes.vec), N=NAMES.length;
+  const i8=new Int8Array(N*DIM);
+  for(let k=0;k<i8.length;k++) i8[k]=raw.charCodeAt(k)<<24>>24;
+  V=new Float32Array(N*DIM);
+  for(let i=0;i<N;i++){let s=0;const o=i*DIM;
+    for(let k=0;k<DIM;k++){const v=i8[o+k]*SCALE/127;V[o+k]=v;s+=v*v;}
+    s=Math.sqrt(s)||1; for(let k=0;k<DIM;k++) V[o+k]/=s;}
+  NAME2IDX={}; for(let i=0;i<N;i++) NAME2IDX[NAMES[i]]=i;
+
+  // base ingredient elements (words + genres) with normalized vectors
+  ELEMS={};
+  for(const e of d.elements){
+    const vec=new Float32Array(DIM); let s=0;
+    for(let k=0;k<DIM;k++){const v=e.vec[k]*SCALE/127;vec[k]=v;s+=v*v;}
+    s=Math.sqrt(s)||1; for(let k=0;k<DIM;k++) vec[k]/=s;
+    ELEMS[e.name]={name:e.name,kind:e.kind,color:e.color,vec,base:true};
+  }
+  try{DISCOVERED=new Set(JSON.parse(localStorage.getItem(KEY_DISC)||'[]'));}catch(e){DISCOVERED=new Set();}
+  try{RECIPES=JSON.parse(localStorage.getItem(KEY_REC)||'{}');}catch(e){RECIPES={};}
+
+  buildPalette();
+  $('#loading').style.display='none';
+  if(!localStorage.getItem('tvtropes-craft-seeded')){seedStarters();localStorage.setItem('tvtropes-craft-seeded','1');}
+}
+
+// ---- crafting: nearest trope to the (normalized) sum of two vectors ----
+function tropeElem(idx){
+  const vec=V.subarray(idx*DIM,idx*DIM+DIM);
+  const c=SUPER[SG[idx]];
+  return {name:NAMES[idx],kind:'trope',color:c?c.color:'#9aa0b8',vec,tropeIndex:idx,sgLabel:c?c.label:''};
+}
+function combine(a,b){
+  const key=[a.name,b.name].sort().join(' ⊕ ');
+  if(RECIPES[key]!=null) return {idx:RECIPES[key],key};
+  const s=new Float32Array(DIM); let ss=0;
+  for(let k=0;k<DIM;k++){const v=a.vec[k]+b.vec[k];s[k]=v;ss+=v*v;}
+  ss=Math.sqrt(ss)||1; for(let k=0;k<DIM;k++) s[k]/=ss;
+  const exclude=new Set();
+  if(a.tropeIndex!=null) exclude.add(a.tropeIndex);
+  if(b.tropeIndex!=null) exclude.add(b.tropeIndex);
+  let best=-1, bestSim=-2;
+  const N=NAMES.length;
+  for(let i=0;i<N;i++){ if(exclude.has(i)) continue;
+    let dot=0; const o=i*DIM;
+    for(let k=0;k<DIM;k++) dot+=s[k]*V[o+k];
+    if(dot>bestSim){bestSim=dot;best=i;}
+  }
+  RECIPES[key]=best;
+  localStorage.setItem(KEY_REC,JSON.stringify(RECIPES));
+  return {idx:best,key};
+}
+
+// ---- palette ----
+function buildPalette(filter=''){
+  const pal=$('#pal'); pal.innerHTML=''; filter=filter.trim().toLowerCase();
+  const words=[],genres=[],tropes=[];
+  for(const e of Object.values(ELEMS)){(e.kind==='genre'?genres:words).push(e);}
+  for(const nm of DISCOVERED){ if(NAME2IDX[nm]!=null) tropes.push(tropeElem(NAME2IDX[nm])); }
+  tropes.sort((a,b)=>a.name.localeCompare(b.name));
+  const match=e=>!filter||e.name.toLowerCase().includes(filter);
+  let n=0;
+  const section=(label,arr)=>{
+    const vis=arr.filter(match); if(!vis.length) return;
+    const h=document.createElement('div');h.className='ghead';h.textContent=label+' · '+vis.length;pal.appendChild(h);
+    for(const e of vis){ pal.appendChild(itemEl(e)); n++; }
+  };
+  section('Words',words); section('Genres',genres);
+  section('Discovered tropes',tropes);
+  $('#count').textContent=n+' found';
+}
+function itemEl(e){
+  const el=document.createElement('div');el.className='item';
+  el.style.background=hexA(e.color,.10); el.style.borderColor=hexA(e.color,.5);
+  el.innerHTML=`<span class="dot" style="background:${e.color}"></span><span class="nm"></span>`;
+  el.querySelector('.nm').textContent=e.name;
+  el.addEventListener('pointerdown',ev=>startPaletteDrag(ev,e));
+  return el;
+}
+
+// ---- board chips ----
+const board=$('#board');
+function makeChip(e,x,y,spawn){
+  const c=document.createElement('div');c.className='chip'+(spawn?' spawn':'');
+  c.style.left=x+'px';c.style.top=y+'px';
+  c.style.background=hexA(e.color,.16);c.style.borderColor=hexA(e.color,.6);
+  const kk=e.kind==='trope'?(e.sgLabel||'trope'):e.kind;
+  c.innerHTML=`<span class="dot" style="background:${e.color}"></span><span class="lbl"></span><span class="kk"></span>`;
+  c.querySelector('.lbl').textContent=e.name;
+  c.querySelector('.kk').textContent=kk;
+  c._el=e;
+  board.appendChild(c);
+  // center the chip on (x,y)
+  c.style.left=(x-c.offsetWidth/2)+'px';c.style.top=(y-c.offsetHeight/2)+'px';
+  c.addEventListener('pointerdown',ev=>startChipDrag(ev,c));
+  if(e.kind==='trope') c.addEventListener('dblclick',()=>window.open('https://tvtropes.org/pmwiki/pmwiki.php/Main/'+e.name,'_blank'));
+  return c;
+}
+function chipCenter(c){const r=c.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}
+
+// ---- dragging ----
+let drag=null;
+function startPaletteDrag(ev,e){
+  ev.preventDefault();
+  const c=makeChip(e,ev.clientX,ev.clientY,false);
+  beginDrag(ev,c,true);
+}
+function startChipDrag(ev,c){ ev.preventDefault(); beginDrag(ev,c,false); }
+function beginDrag(ev,c,fresh){
+  c.classList.add('drag');
+  const r=c.getBoundingClientRect();
+  drag={c,dx:ev.clientX-r.left,dy:ev.clientY-r.top,moved:fresh,hot:null};
+  c.setPointerCapture(ev.pointerId);
+  c.onpointermove=onDragMove; c.onpointerup=onDragUp; c.onpointercancel=onDragUp;
+}
+function onDragMove(ev){
+  if(!drag) return;
+  drag.moved=true;
+  drag.c.style.left=(ev.clientX-drag.dx)+'px';
+  drag.c.style.top=(ev.clientY-drag.dy)+'px';
+  const t=hitTest(drag.c);
+  if(t!==drag.hot){ if(drag.hot) drag.hot.classList.remove('hot'); drag.hot=t; if(t) t.classList.add('hot'); }
+}
+function onDragUp(ev){
+  if(!drag) return;
+  const {c,hot,moved}=drag;
+  c.classList.remove('drag');
+  if(hot) hot.classList.remove('hot');
+  // dropped over the sidebar (palette) -> discard
+  const side=$('#side').getBoundingClientRect();
+  const overSide=ev.clientX>=side.left&&ev.clientX<=side.right&&ev.clientY>=side.top&&ev.clientY<=side.bottom;
+  drag=null; c.onpointermove=c.onpointerup=c.onpointercancel=null;
+  if(hot){ doCombine(c,hot); return; }
+  if(overSide && c._el.base){ c.remove(); return; }
+}
+function hitTest(c){
+  const a=c.getBoundingClientRect();
+  let best=null,bestOv=0;
+  for(const o of board.children){
+    if(o===c||!o.classList.contains('chip')) continue;
+    const b=o.getBoundingClientRect();
+    const ox=Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left));
+    const oy=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+    const ov=ox*oy;
+    if(ov>bestOv && ov>0.12*a.width*a.height){bestOv=ov;best=o;}
+  }
+  return best;
+}
+
+// ---- combine action ----
+function doCombine(c1,c2){
+  const p1=chipCenter(c1), p2=chipCenter(c2);
+  const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2;
+  const {idx}=combine(c1._el,c2._el);
+  c1.remove(); c2.remove();
+  const res=tropeElem(idx);
+  makeChip(res,mx,my,true);
+  const isNew=!DISCOVERED.has(res.name);
+  if(isNew){
+    DISCOVERED.add(res.name);
+    localStorage.setItem(KEY_DISC,JSON.stringify([...DISCOVERED]));
+    buildPalette($('#search').value);
+    toast(res,true);
+  } else {
+    toast(res,false);
+  }
+}
+function toast(res,isNew){
+  const t=document.createElement('div');t.className='toast';
+  t.style.borderColor=hexA(res.color,.55);
+  t.innerHTML=(isNew?'<span class="new">NEW</span>':'')+
+    `<span class="dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${res.color};margin-right:6px"></span>`+
+    `<b></b>`+(res.sgLabel?` <span style="color:var(--dim)"> · ${res.sgLabel}</span>`:'');
+  t.querySelector('b').textContent=res.name;
+  $('#toasts').appendChild(t);
+  setTimeout(()=>t.remove(),3100);
+}
+
+// ---- starters: scatter a handful of base ingredients to begin ----
+function seedStarters(){
+  const picks=['Hero','Sword','Magic','Love','Death','Monster','High Fantasy','Cyberpunk'];
+  const W=window.innerWidth, H=window.innerHeight;
+  picks.forEach((nm,i)=>{ const e=ELEMS[nm]; if(!e) return;
+    const col=i%4, row=(i/4)|0;
+    makeChip(e,120+col*150+(Math.random()*30-15), 150+row*90+(Math.random()*30-15), true);
+  });
+}
+
+// ---- controls ----
+$('#search').addEventListener('input',e=>buildPalette(e.target.value));
+$('#clearBoard').addEventListener('click',()=>{ [...board.querySelectorAll('.chip')].forEach(c=>c.remove()); });
+$('#resetAll').addEventListener('click',()=>{
+  if(!confirm('Reset all discovered tropes and clear the board?')) return;
+  DISCOVERED.clear(); RECIPES={};
+  localStorage.removeItem(KEY_DISC); localStorage.removeItem(KEY_REC);
+  [...board.querySelectorAll('.chip')].forEach(c=>c.remove());
+  buildPalette($('#search').value);
+});
+$('#palToggle').addEventListener('click',()=>{
+  const s=$('#side'), closed=s.classList.toggle('closed');
+  $('#palToggle').textContent=closed?'palette ▾':'palette ▴';
+});
+
+boot();
+</script>
+</body>
+</html>
