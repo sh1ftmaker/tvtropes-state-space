@@ -11,20 +11,28 @@ WebGL demo.
 ## What it does
 - **Data**: a GitHub clone of the [dhruvilgala/tvtropes](https://github.com/dhruvilgala/tvtropes)
   dataset (30K tropes + descriptions, 1.9M occurrences across film / TV / literature).
-- **Type signal**: each trope gets a media-mix signature (film/tv/lit counts +
-  dominant medium) and a "genderedness" score, used to color the space.
 - **Embeddings**: every trope's *name + description* is embedded with Google's
   `gemini-embedding-2` (768-dim, L2-normalized) via **Vertex AI**.
-- **Layout**: PCA → UMAP (2D & 3D) for the map, KMeans for 24 semantic clusters,
-  and an exact k-nearest-neighbor graph in the full embedding space.
+- **Genre dimension (primary)**: a curated taxonomy of ~110 narrative genres &
+  settings (from Wikipedia's [List of writing genres](https://en.wikipedia.org/wiki/List_of_writing_genres),
+  fiction branches) is embedded by the *same* model, so each trope's affinity to
+  each genre is a cosine dot product — no re-embedding the 30K tropes. This
+  **genre-affinity space is what lays out the map**; tropes are colored by their
+  dominant supergenre (14 buckets: Fantasy, Sci-Fi, Horror, Romance, …).
+- **Other signals**: a media-mix signature (film/tv/lit) + a "genderedness" score
+  give alternate colorings.
+- **Layout**: UMAP (2D & 3D) over the genre-affinity space for the map, KMeans for
+  genre-coherent clusters, and an exact k-nearest-neighbor graph in the *full*
+  embedding space (the genuine "most similar trope" trace — meaning, not just shared genre).
 - **Demo**: two linked single-file WebGL views —
   - **2D map** (`index.html`): pan/zoom + touch over all 30,984 points, color by
-    semantic cluster / dominant medium / genderedness, size by popularity,
+    genre / semantic cluster / dominant medium / genderedness, size by popularity,
     full-text search, click-to-trace nearest neighbors.
   - **3D flythrough** (`3d.html`, Three.js): fly (WASD + look) or orbit through the
-    cloud, render the full neighbor web, and **remap the X/Y/Z axes to any metric**
-    (semantic UMAP axes, film/tv/lit share, popularity, genderedness, cluster) to
-    smoothly regroup the tropes — set Z=flat for a 2D arrangement to compare.
+    cloud, render the full neighbor web, and **remap the X/Y/Z axes to any metric** —
+    including a per-supergenre affinity axis each (set X=Fantasy, Y=Horror, Z=Sci-Fi
+    to regroup the cloud), plus genre-map axes, film/tv/lit share, popularity,
+    genderedness, cluster; set Z=flat for a 2D arrangement to compare.
 
 ## Pipeline
 ```
@@ -35,7 +43,10 @@ out/trope_features.parquet            # 30,984 rows: text + media mix + gendered
         │  embed_gemini.py  (gemini-embedding-2, Vertex AI, 24 workers, resumable)
         ▼
 out/embeddings_gemini.npz             # (30984, 768) float32, L2-normalized
-        │  project.py  (PCA→UMAP 2D/3D + KMeans + kNN)
+        │  embed_genres.py  (genres.py taxonomy -> same model)
+        ▼
+out/embeddings_genres.npz             # (~110, 768) genre vectors
+        │  project.py  (genre-affinity → UMAP 2D/3D + KMeans + semantic kNN)
         ▼
 out/points.json                       # everything the demo needs
         │  index.html  (WebGL)
@@ -54,11 +65,14 @@ python src/embed_gemini.py --in out/trope_features.parquet \
     --model gemini-embedding-2 --dim 768 --workers 24
 #   (or AI-Studio API key:  set GEMINI_API_KEY  and drop --sa/--location)
 
-# 3. projection
-python src/project.py --emb out/embeddings_gemini.npz \
-    --feat out/trope_features.parquet --out out
+# 3. genre vectors (same model, ~110 narrative genres from genres.py)
+python src/embed_genres.py --out out/embeddings_genres.npz --sa sa.json --location global
 
-# 4. view
+# 4. projection (genre affinity drives the 2D/3D layout)
+python src/project.py --emb out/embeddings_gemini.npz \
+    --feat out/trope_features.parquet --genres out/embeddings_genres.npz --out out
+
+# 5. view
 cd out && python -m http.server 8731    # open http://localhost:8731
 ```
 
