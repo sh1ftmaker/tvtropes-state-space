@@ -26,7 +26,6 @@ KINDS = {
 # (name, kind, gloss)
 WORDS = [
     # ---------------- characters ----------------
-    ("Hero", "character", "Hero: the courageous protagonist who rises to face danger and save others."),
     ("Villain", "character", "Villain: the evil antagonist who opposes the hero and threatens the world."),
     ("Mentor", "character", "Mentor: a wise older guide who trains and counsels the hero."),
     ("Sidekick", "character", "Sidekick: a loyal companion who supports the hero on the adventure."),
@@ -110,6 +109,16 @@ WORDS = [
     ("Invasion", "event", "Invasion: a hostile force overrunning a land or world."),
     ("Trial", "event", "Trial: a courtroom reckoning of guilt and judgment."),
     ("Rebirth", "event", "Rebirth: resurrection, renewal or transformation into something new."),
+]
+
+
+# The 4 primordial roots — the ONLY starting ingredients in Trope Craft.
+# Every word, genre and trope is crafted up from these four. (name, gloss)
+ROOTS = [
+    ("Hero", "Hero: a character, a person or being who acts, struggles and is acted upon — the human heart of any story."),
+    ("World", "World: the setting, place, time and reality in which a story unfolds — its lands, cultures and rules."),
+    ("Conflict", "Conflict: the central struggle, opposition, danger or problem that drives every plot forward."),
+    ("Wonder", "Wonder: the emotion, awe, fear, love and imagination — the feelings and the fantastical that give a story meaning."),
 ]
 
 

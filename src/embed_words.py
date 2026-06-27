@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from words import WORDS, word_text  # noqa: E402
+from words import WORDS, ROOTS, word_text  # noqa: E402
 
 
 def log(*a):
@@ -57,8 +57,12 @@ def main():
 
     cfg = types.EmbedContentConfig(task_type=args.task_type, output_dimensionality=args.dim)
 
+    # roots embedded alongside the words (kind="root") so the game's primordial
+    # 4 share the exact same model + space as everything they craft into.
+    entries = [(n, "root", g) for n, g in ROOTS] + list(WORDS)
+
     names, kinds, vecs = [], [], []
-    for name, kind, gloss in WORDS:
+    for name, kind, gloss in entries:
         text = word_text(name, gloss)
         delay = 2.0
         for attempt in range(8):
@@ -71,7 +75,7 @@ def main():
                 names.append(name)
                 kinds.append(kind)
                 vecs.append(emb)
-                log(f"  [{len(names):3d}/{len(WORDS)}] {name}")
+                log(f"  [{len(names):3d}/{len(entries)}] {name}")
                 break
             except Exception as e:  # noqa: BLE001
                 if attempt == 7:

@@ -34,12 +34,16 @@ WebGL demo.
     to regroup the cloud), plus genre-map axes, film/tv/lit share, popularity,
     genderedness, cluster; set Z=flat for a 2D arrangement to compare.
   - **Trope Craft** (`craft.html`): an [Infinite Craft](https://neal.fun/infinite-craft/)-style
-    game. Drag two ingredients together and the result is whichever trope sits
-    nearest the *sum* of their vectors — fully offline, no LLM. Start from 76
-    narrative "words" (Hero, Sword, Betrayal…) + the 107 genres, craft them into
-    tropes, then combine tropes for deeper ones (Sword+Magic→SpellBlade,
-    Love+Betrayal→RevengeRomance, Cyberpunk+Detective→StreetSamurai). Chips are
-    colored by genre; discoveries persist in localStorage.
+    game. Combine two ingredients (drag one onto another, or tap two) and the
+    result is whichever item sits nearest the *sum* of their vectors — fully
+    offline, no LLM. You start with only **4 primordials — Hero / World /
+    Conflict / Wonder** — and craft up through 75 narrative words and the 107
+    genres into all 30,984 tropes (Hero+World→High Fantasy, Cyberpunk+Detective→
+    StreetSamurai). **Every genre and every trope is provably reachable** from
+    the 4 roots — `build_craft.py` runs the full reachability closure on the
+    shipped (quantized) vectors and bakes a recipe for each item, surfaced as an
+    in-game `?` hint. Chips are colored by genre; discoveries persist in
+    localStorage; mobile gets tap-to-combine + a bottom-sheet palette.
 
 ## Pipeline
 ```
@@ -60,13 +64,13 @@ out/points.json                       # everything the 2D/3D demos need
         ▼
 http://localhost:8731                 # interactive state space
 
-out/embeddings_gemini.npz + embeddings_words.npz (words.py) + embeddings_genres.npz
-        │  build_craft.py  (PCA->48d, int8-quantized, base64)
+out/embeddings_gemini.npz + embeddings_words.npz (words.py: 4 roots + 75 words) + embeddings_genres.npz
+        │  build_craft.py  (PCA->48d, int8-quantized + BFS reachability proof)
         ▼
-out/craft.json                        # 2.9MB: trope vectors + word/genre ingredients
+out/craft.json (2.7MB) + craft_recipes.bin (0.5MB)   # vectors + per-item recipe
         │  craft.html
         ▼
-Trope Craft                           # offline crafting game
+Trope Craft                           # offline crafting game, all reachable from 4 roots
 ```
 
 ## Reproduce
