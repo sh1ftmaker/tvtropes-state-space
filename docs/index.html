@@ -11,10 +11,11 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
-    font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
-  #stage{position:fixed;inset:0}
+    font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;
+    overscroll-behavior:none;-webkit-text-size-adjust:100%}
+  #stage{position:fixed;inset:0;touch-action:none}
   canvas{position:absolute;inset:0;display:block}
-  #gl{z-index:1}
+  #gl{z-index:1;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   #fx{z-index:2;pointer-events:none}
   /* ---- HUD ---- */
   .hud{position:fixed;z-index:5}
@@ -70,6 +71,25 @@
   .hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:5;color:var(--dim);
     font-size:11px;background:var(--panel);padding:5px 12px;border-radius:20px;border:1px solid var(--line)}
   a.src{color:var(--accent);text-decoration:none}
+  /* ---- mobile / touch layout ---- */
+  @media (max-width:680px){
+    #title{top:8px;left:10px;right:10px;max-width:none}
+    #title p{display:none}
+    #controls{top:auto;bottom:8px;left:10px;right:10px;width:auto;padding:10px 11px;
+      max-height:46vh;overflow:auto}
+    #controls #results{max-height:96px}
+    /* legend collapses into a compact strip above the controls */
+    #legend{left:10px;right:auto;bottom:auto;top:64px;width:auto;max-width:60vw;padding:8px 10px}
+    #legend .lg{font-size:10.5px;margin:2px 0}
+    #card{left:10px;right:10px;bottom:8px;width:auto;max-height:52vh;overflow:auto;z-index:6}
+    #card .desc{max-height:84px}
+    .hint{display:none}
+    #tip{display:none!important}      /* no hover on touch — selection card covers it */
+  }
+  @media (max-width:680px) and (orientation:landscape){
+    #controls{max-height:64vh;width:46vw;right:auto}
+    #card{left:auto;right:10px;width:46vw;max-height:80vh}
+  }
 </style>
 </head>
 <body>
@@ -80,7 +100,7 @@
 
 <div id="title" class="hud">
   <h1>TVTropes State Space</h1>
-  <p>30,984 narrative tropes embedded by meaning &amp; arranged by similarity. Drag to pan, scroll to zoom, hover to inspect, click to trace nearest neighbors.</p>
+  <p>30,984 narrative tropes embedded by meaning &amp; arranged by similarity. Drag / pinch / scroll to explore, tap or click a star to trace its nearest neighbors.</p>
   <span class="badge" id="modelBadge">embedding: …</span>
 </div>
 
@@ -317,15 +337,63 @@ window.addEventListener('mousemove',e=>{
     const i=pickAt(e.clientX,e.clientY); hoverTrope(i,e.clientX,e.clientY);
   }
 });
-glc.addEventListener('wheel',e=>{e.preventDefault();
-  const f=Math.exp(-e.deltaY*0.0012);
-  // zoom toward cursor
+// zoom by factor f toward a screen point; shared by wheel + pinch
+function zoomAt(px,py,f){
   const r=glc.getBoundingClientRect();
-  const cx=( (e.clientX-r.left)/r.width*2-1 );
-  const cy=-( (e.clientY-r.top)/r.height*2-1 );
+  const cx=((px-r.left)/r.width*2-1);
+  const cy=-((py-r.top)/r.height*2-1);
   view.tx=cx-(cx-view.tx)*f; view.ty=cy-(cy-view.ty)*f;
-  view.s*=f; invalidate();
+  view.s*=f;
+}
+// pan by a pixel delta; shared by mouse-drag + touch
+function panByPx(dx,dy){
+  view.tx += dx/(fxc.width/dpr)*2;
+  view.ty -= dy/(fxc.height/dpr)*2;
+}
+glc.addEventListener('wheel',e=>{e.preventDefault();
+  zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY*0.0012)); invalidate();
 },{passive:false});
+
+// ---------- touch: 1-finger pan, 2-finger pinch-zoom, tap to select ----------
+let tch=null;
+const tDist=(a,b)=>Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+const tMid =(a,b)=>({x:(a.clientX+b.clientX)/2, y:(a.clientY+b.clientY)/2});
+glc.addEventListener('touchstart',e=>{
+  e.preventDefault(); tip.style.display='none';
+  if(e.touches.length===1){
+    const t=e.touches[0];
+    tch={mode:'pan', sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:0, t0:Date.now()};
+  } else {
+    const m=tMid(e.touches[0],e.touches[1]);
+    tch={mode:'pinch', dist:tDist(e.touches[0],e.touches[1]), mx:m.x, my:m.y};
+  }
+},{passive:false});
+glc.addEventListener('touchmove',e=>{
+  e.preventDefault(); if(!tch)return;
+  if(tch.mode==='pinch' && e.touches.length>=2){
+    const a=e.touches[0], b=e.touches[1], d=tDist(a,b), m=tMid(a,b);
+    if(tch.dist>0) zoomAt(m.x, m.y, d/tch.dist);  // pinch zoom
+    panByPx(m.x-tch.mx, m.y-tch.my);              // two-finger pan
+    tch.dist=d; tch.mx=m.x; tch.my=m.y; invalidate();
+  } else if(tch.mode==='pan' && e.touches.length===1){
+    const t=e.touches[0];
+    panByPx(t.clientX-tch.px, t.clientY-tch.py);
+    tch.moved+=Math.abs(t.clientX-tch.px)+Math.abs(t.clientY-tch.py);
+    tch.px=t.clientX; tch.py=t.clientY; invalidate();
+  }
+},{passive:false});
+glc.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(tch && tch.mode==='pan' && tch.moved<12 && Date.now()-tch.t0<500){
+    const i=pickAt(tch.sx, tch.sy);              // tap = select
+    if(i>=0) selectTrope(i); else deselect();
+  }
+  if(e.touches.length===1){                        // pinch -> one finger: resume pan
+    const t=e.touches[0];
+    tch={mode:'pan', sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:99, t0:Date.now()};
+  } else if(e.touches.length===0){ tch=null; }
+},{passive:false});
+glc.addEventListener('touchcancel',()=>{tch=null;},{passive:false});
 
 function screen2world(px,py){
   const r=glc.getBoundingClientRect(); const ar=glc.width/glc.height;
