@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>TVTropes State Space — 3D Flythrough</title>
+<style>
+  :root{
+    --bg:#06070d; --panel:rgba(16,18,28,.82); --line:rgba(255,255,255,.08);
+    --txt:#e7e9f3; --dim:#9aa0b8; --accent:#7cf2d6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);overflow:hidden;
+    font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;
+    overscroll-behavior:none;-webkit-text-size-adjust:100%}
+  #c{position:fixed;inset:0;display:block;touch-action:none;-webkit-tap-highlight-color:transparent}
+  #labels{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+  .lab{position:absolute;transform:translate(-50%,-140%);white-space:nowrap;font-size:11px;
+    padding:1px 6px;border-radius:6px;background:rgba(6,7,13,.7);color:#e7e9f3;border:1px solid var(--line)}
+  .lab.sel{color:var(--accent);font-weight:600;font-size:12.5px;border-color:rgba(124,242,214,.4)}
+  .hud{position:fixed;z-index:5}
+  .panel{background:var(--panel);backdrop-filter:blur(9px);border:1px solid var(--line);
+    border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  #title{top:14px;left:16px;max-width:340px}
+  #title h1{margin:0;font-size:15px;letter-spacing:.3px;font-weight:650}
+  #title p{margin:3px 0 0;color:var(--dim);font-size:11.5px}
+  #nav{margin-top:8px;display:flex;gap:6px}
+  #nav a{font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:20px;
+    color:var(--dim);text-decoration:none}
+  #nav a.on{background:var(--accent);color:#04130f;border-color:var(--accent);font-weight:600}
+  #controls{top:14px;right:16px;width:236px;padding:13px 14px;max-height:92vh;overflow:auto}
+  #controls h2{margin:10px 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:var(--dim)}
+  #controls h2:first-child{margin-top:0}
+  .seg{display:flex;flex-wrap:wrap;gap:5px}
+  .seg button{flex:1 1 auto;min-width:46px;padding:5px 6px;border:1px solid var(--line);
+    background:transparent;color:var(--dim);border-radius:7px;cursor:pointer;font-size:11px;transition:.12s}
+  .seg button:hover{color:var(--txt);border-color:rgba(255,255,255,.22)}
+  .seg button.on{background:var(--accent);color:#04130f;border-color:var(--accent);font-weight:600}
+  .axis{display:flex;align-items:center;gap:7px;margin:5px 0;color:var(--dim);font-size:11.5px}
+  .axis label{width:14px;font-weight:600;color:var(--txt)}
+  select,#search{width:100%;padding:6px 8px;background:rgba(0,0,0,.32);border:1px solid var(--line);
+    border-radius:7px;color:var(--txt);font-size:12px;outline:none}
+  select:focus,#search:focus{border-color:var(--accent)}
+  .axis select{flex:1}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;color:var(--dim);font-size:11.5px}
+  .row input[type=range]{flex:1;accent-color:var(--accent)}
+  #results{margin-top:6px;max-height:130px;overflow:auto}
+  #results div{padding:4px 7px;border-radius:6px;cursor:pointer;color:var(--dim);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #results div:hover{background:rgba(255,255,255,.06);color:var(--txt)}
+  #card{bottom:14px;left:16px;width:330px;padding:15px 16px;display:none}
+  #card.show{display:block}
+  #card h3{margin:0 0 2px;font-size:15px;font-weight:650}
+  #card .sub{color:var(--dim);font-size:11px;margin-bottom:9px}
+  #card .desc{color:#c7cbde;font-size:12px;max-height:104px;overflow:auto;margin-bottom:10px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;margin:0 4px 4px 0}
+  #card h4{margin:8px 0 5px;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+  #nbrs div{padding:3px 6px;border-radius:6px;cursor:pointer;color:var(--accent);font-size:11.5px}
+  #nbrs div:hover{background:rgba(124,242,214,.1)}
+  a.src{color:var(--accent);text-decoration:none;font-size:11.5px}
+  #help{bottom:14px;left:50%;transform:translateX(-50%);color:var(--dim);font-size:11px;
+    background:var(--panel);padding:6px 13px;border-radius:20px;border:1px solid var(--line);text-align:center}
+  #legend{bottom:14px;right:16px;width:236px;padding:11px 13px}
+  #legend h2{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:var(--dim)}
+  .lg{display:flex;align-items:center;gap:7px;margin:3px 0;font-size:11.5px;color:var(--dim)}
+  .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  .bar{height:9px;border-radius:5px;margin:5px 0 2px}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+    background:var(--bg);flex-direction:column;gap:14px}
+  #loading .spin{width:34px;height:34px;border:3px solid rgba(255,255,255,.12);
+    border-top-color:var(--accent);border-radius:50%;animation:s 1s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  @media (max-width:680px){
+    #title{top:8px;left:10px;right:10px;max-width:none}
+    #title p{display:none}
+    #controls{top:auto;bottom:8px;left:10px;right:10px;width:auto;max-height:48vh}
+    #legend{top:92px;left:10px;right:auto;bottom:auto;width:auto;max-width:58vw;padding:8px 10px}
+    #card{left:10px;right:10px;bottom:8px;width:auto;max-height:54vh;z-index:6}
+    #help{display:none}
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+
+<div id="title" class="hud">
+  <h1>TVTropes State Space · 3D</h1>
+  <p>Fly through 30,984 tropes. Tap a star to trace its semantic links; remap the X/Y/Z axes to regroup the cloud by any metric.</p>
+  <div id="nav"><a href="index.html">2D map</a><a href="3d.html" class="on">3D flythrough</a></div>
+</div>
+
+<div id="controls" class="hud panel">
+  <h2>Color by</h2>
+  <div class="seg" id="colorModes">
+    <button data-m="cluster" class="on">Semantic</button>
+    <button data-m="media">Media</button>
+    <button data-m="gender">Gender</button>
+  </div>
+
+  <h2>Layout axes</h2>
+  <div class="axis"><label>X</label><select id="axX"></select></div>
+  <div class="axis"><label>Y</label><select id="axY"></select></div>
+  <div class="axis"><label>Z</label><select id="axZ"></select></div>
+
+  <h2>Connections</h2>
+  <div class="seg" id="connModes">
+    <button data-k="sel" class="on">Selected</button>
+    <button data-k="none">None</button>
+    <button data-k="all">All</button>
+  </div>
+
+  <h2>Navigation</h2>
+  <div class="seg" id="navModes">
+    <button data-n="fly" class="on">Fly</button>
+    <button data-n="orbit">Orbit</button>
+  </div>
+  <div class="row"><span>Speed</span><input id="speed" type="range" min="4" max="160" value="36"></div>
+  <div class="row"><span>Glow</span><input id="glow" type="range" min="20" max="100" value="60"></div>
+  <div class="seg"><button id="reset">Recenter view</button></div>
+
+  <h2>Find a trope</h2>
+  <input id="search" placeholder="e.g. ChekhovsGun, BigBad…" autocomplete="off">
+  <div id="results"></div>
+</div>
+
+<div id="legend" class="hud panel">
+  <h2 id="legendTitle">Semantic clusters</h2>
+  <div id="legendBody"></div>
+</div>
+
+<div id="card" class="hud panel">
+  <h3 id="cTitle"></h3>
+  <div class="sub" id="cSub"></div>
+  <div id="cPills"></div>
+  <div class="desc" id="cDesc"></div>
+  <h4>Nearest neighbors</h4>
+  <div id="nbrs"></div>
+  <div style="margin-top:8px"><a class="src" id="cLink" target="_blank" rel="noopener">Open on tvtropes.org ↗</a></div>
+</div>
+
+<div id="help" class="hud">WASD move · drag to look · R/F up·down · Q/E roll · scroll to dolly · tap a star to inspect</div>
+<div id="loading"><div class="spin"></div><div>building the trope galaxy…</div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { FlyControls } from 'three/addons/controls/FlyControls.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const PALETTE = ["#7cf2d6","#ff8fab","#ffd166","#8ecae6","#c792ea","#80ed99","#f9844a",
+ "#90caf9","#f78fb3","#b5e48c","#ffadad","#a0c4ff","#fdffb6","#bdb2ff","#9bf6ff","#ffc6ff",
+ "#caffbf","#ffd6a5","#a3c4f3","#f1c0e8","#84dcc6","#ffaaa5","#b8f2e6","#e2c2ff"];
+const MEDIA_COLORS = {film:"#8ecae6", tv:"#ff8fab", lit:"#ffd166", unused:"#566", unus:"#566"};
+const hexRGB = h=>{const n=parseInt(h.slice(1),16);return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];};
+const SCALE = 60;
+const isTouch = matchMedia('(pointer:coarse)').matches;
+
+let N=0, NAME, DESC, CL, MEDIA, TOT, NF, NT, NL, G, NN, KC=24;
+let AX = {};            // metric -> Float32Array in [-1,1]
+let cur, tgt;           // live + target positions (N*3), world units
+let colorMode="cluster", connMode="sel", glow=0.6;
+let sel=-1, morphing=false;
+
+const AXIS_OPTIONS = [
+  ["umap1","Semantic axis 1"],["umap2","Semantic axis 2"],["umap3","Semantic axis 3"],
+  ["pop","Popularity"],["gender","Genderedness"],["cluster","Cluster id"],
+  ["film","Film share"],["tv","TV share"],["lit","Literature share"],["flat","Flat (0)"],
+];
+
+const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('c'), antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06070d);
+scene.fog = new THREE.FogExp2(0x06070d, 0.0042);
+const camera = new THREE.PerspectiveCamera(62, innerWidth/innerHeight, 0.1, 6000);
+camera.position.set(0,0,135);
+
+let points, geom, colAttr, posAttr, sizeAttr;
+let edgesAll, edgesSel, marker;
+let fly, orbit, controls;
+const clock = new THREE.Clock();
+
+// ---------------- load ----------------
+fetch('points.json').then(r=>r.json()).then(d=>{
+  const P=d.points; N=P.length; KC=d.meta.clusters||24;
+  NAME=new Array(N); DESC=new Array(N); CL=new Int16Array(N); MEDIA=new Array(N);
+  TOT=new Float32Array(N); NF=new Int32Array(N); NT=new Int32Array(N); NL=new Int32Array(N);
+  G=new Array(N); NN=new Array(N);
+  const um1=new Float32Array(N),um2=new Float32Array(N),um3=new Float32Array(N);
+  const ff=new Float32Array(N),ft=new Float32Array(N),fl=new Float32Array(N);
+  const pop=new Float32Array(N),gen=new Float32Array(N),clu=new Float32Array(N);
+  let maxLP=0;
+  for(let i=0;i<N;i++){const p=P[i];
+    NAME[i]=p.name; DESC[i]=p.d||''; CL[i]=p.c; MEDIA[i]=p.media;
+    TOT[i]=p.tot; NF[i]=p.nf; NT[i]=p.nt; NL[i]=p.nl; G[i]=(p.g==null?null:p.g); NN[i]=p.nn;
+    um1[i]=p.x3; um2[i]=p.y3; um3[i]=p.z3;
+    const tot=Math.max(p.nf+p.nt+p.nl,1);
+    ff[i]=p.nf/tot*2-1; ft[i]=p.nt/tot*2-1; fl[i]=p.nl/tot*2-1;
+    const lp=Math.log1p(p.tot); pop[i]=lp; maxLP=Math.max(maxLP,lp);
+    gen[i]=(p.g==null?0:p.g);
+    clu[i]=p.c/(KC-1)*2-1;
+  }
+  for(let i=0;i<N;i++) pop[i]=pop[i]/(maxLP||1)*2-1;
+  AX={umap1:um1,umap2:um2,umap3:um3,film:ff,tv:ft,lit:fl,pop,gender:gen,cluster:clu,
+      flat:new Float32Array(N)};
+  buildUI(); buildScene(); buildControls();
+  document.getElementById('loading').style.display='none';
+  animate();
+}).catch(e=>{document.getElementById('loading').innerHTML='<div>failed to load points.json<br><small>'+e+'</small></div>';});
+
+// ---------------- scene ----------------
+function buildScene(){
+  cur=new Float32Array(N*3);
+  geom=new THREE.BufferGeometry();
+  posAttr=new THREE.BufferAttribute(cur,3); posAttr.setUsage(THREE.DynamicDrawUsage);
+  colAttr=new THREE.BufferAttribute(new Float32Array(N*3),3); colAttr.setUsage(THREE.DynamicDrawUsage);
+  sizeAttr=new THREE.BufferAttribute(new Float32Array(N),1);
+  geom.setAttribute('position',posAttr);
+  geom.setAttribute('color',colAttr);
+  geom.setAttribute('size',sizeAttr);
+
+  const mat=new THREE.ShaderMaterial({
+    uniforms:{uSize:{value:1}, uGlow:{value:glow}},
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    vertexShader:`
+      attribute float size; attribute vec3 color; varying vec3 vColor;
+      uniform float uSize;
+      void main(){ vColor=color;
+        vec4 mv=modelViewMatrix*vec4(position,1.0);
+        gl_PointSize=clamp(size*uSize*(120.0/-mv.z),0.8,22.0);
+        gl_Position=projectionMatrix*mv; }`,
+    fragmentShader:`
+      varying vec3 vColor; uniform float uGlow;
+      void main(){ vec2 d=gl_PointCoord-0.5; float r=length(d);
+        if(r>0.5) discard; float a=smoothstep(0.5,0.0,r);
+        gl_FragColor=vec4(vColor*(0.45+0.7*a), a*(0.30+0.45*uGlow)); }`
+  });
+  points=new THREE.Points(geom,mat); points.frustumCulled=false; scene.add(points);
+  window._mat=mat;
+
+  // selected-node neighbor edges (small, updated per frame)
+  edgesSel=new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({color:0x7cf2d6, transparent:true, opacity:0.7, blending:THREE.AdditiveBlending, depthWrite:false}));
+  edgesSel.frustumCulled=false; scene.add(edgesSel);
+
+  // selection marker
+  marker=new THREE.Mesh(new THREE.SphereGeometry(1.6,16,12),
+    new THREE.MeshBasicMaterial({color:0xffffff, wireframe:true, transparent:true, opacity:0.85}));
+  marker.visible=false; scene.add(marker);
+
+  setLayoutImmediate();      // place at semantic UMAP
+  recomputeColors(); recomputeSizes();
+}
+
+// ---------------- layout / morph ----------------
+function axisName(id){return document.getElementById(id).value;}
+function computeTarget(){
+  const ax=AX[axisName('axX')]||AX.umap1, ay=AX[axisName('axY')]||AX.umap2, az=AX[axisName('axZ')]||AX.umap3;
+  if(!tgt) tgt=new Float32Array(N*3);
+  for(let i=0;i<N;i++){ tgt[i*3]=ax[i]*SCALE; tgt[i*3+1]=ay[i]*SCALE; tgt[i*3+2]=az[i]*SCALE; }
+}
+function setLayoutImmediate(){ computeTarget(); cur.set(tgt); posAttr.needsUpdate=true; rebuildAllEdges(); }
+function startMorph(){ computeTarget(); morphing=true; if(edgesAll) edgesAll.visible=false; }
+
+// ---------------- colors / sizes ----------------
+function recomputeColors(){
+  const c=colAttr.array;
+  for(let i=0;i<N;i++){ let col;
+    if(colorMode==="cluster") col=hexRGB(PALETTE[CL[i]%PALETTE.length]);
+    else if(colorMode==="media") col=hexRGB(MEDIA_COLORS[MEDIA[i]]||"#566");
+    else { const g=G[i];
+      if(g==null) col=[0.32,0.34,0.42];
+      else { const t=(g+1)/2; col=[0.95-0.55*t,0.45+0.15*Math.sin(t*3.14),0.35+0.6*t]; } }
+    c[i*3]=col[0]; c[i*3+1]=col[1]; c[i*3+2]=col[2];
+  }
+  colAttr.needsUpdate=true; buildLegend();
+}
+function recomputeSizes(){
+  let mx=0; for(let i=0;i<N;i++) mx=Math.max(mx,TOT[i]);
+  const s=sizeAttr.array;
+  for(let i=0;i<N;i++) s[i]=1.1+3.0*Math.log1p(TOT[i])/Math.log1p(mx);
+  sizeAttr.needsUpdate=true;
+}
+
+// ---------------- edges ----------------
+function rebuildAllEdges(){
+  if(connMode!=='all'){ if(edgesAll) edgesAll.visible=false; return; }
+  const segs=[]; for(let i=0;i<N;i++){ const a=i*3; for(const j of NN[i]){ const b=j*3;
+    segs.push(cur[a],cur[a+1],cur[a+2], cur[b],cur[b+1],cur[b+2]); } }
+  const arr=new Float32Array(segs);
+  if(!edgesAll){
+    edgesAll=new THREE.LineSegments(new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({color:0x49c4b6, transparent:true, opacity:0.018,
+        blending:THREE.NormalBlending, depthWrite:false}));
+    edgesAll.frustumCulled=false; scene.add(edgesAll);
+  }
+  edgesAll.geometry.dispose();
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(arr,3));
+  edgesAll.geometry=g; edgesAll.visible=true;
+}
+function updateSelEdges(){
+  if(sel<0 || connMode==='none'){ edgesSel.visible=false; marker.visible=false; return; }
+  const a=sel*3, pos=[];
+  for(const j of NN[sel]){ const b=j*3;
+    pos.push(cur[a],cur[a+1],cur[a+2], cur[b],cur[b+1],cur[b+2]); }
+  const g=edgesSel.geometry;
+  if(!g.getAttribute('position') || g.getAttribute('position').count!==pos.length/3){
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos),3));
+  } else { g.getAttribute('position').array.set(pos); g.getAttribute('position').needsUpdate=true; }
+  edgesSel.visible=true;
+  marker.position.set(cur[a],cur[a+1],cur[a+2]); marker.visible=true;
+}
+
+// ---------------- controls ----------------
+function buildControls(){
+  fly=new FlyControls(camera, renderer.domElement);
+  fly.movementSpeed=36; fly.rollSpeed=0.6; fly.dragToLook=true; fly.autoForward=false;
+  orbit=new OrbitControls(camera, renderer.domElement);
+  orbit.enableDamping=true; orbit.dampingFactor=0.08; orbit.enablePan=true;
+  setNav(isTouch?'orbit':'fly');
+}
+function setNav(n){
+  if(n==='fly'){ controls=fly; fly.enabled=true; orbit.enabled=false; }
+  else { controls=orbit; orbit.enabled=true; fly.enabled=false; orbit.target.set(0,0,0); }
+  document.querySelectorAll('#navModes button').forEach(b=>b.classList.toggle('on',b.dataset.n===n));
+  document.getElementById('help').style.display = (n==='fly'&&!isTouch)?'block':'none';
+}
+
+// ---------------- picking ----------------
+const _v=new THREE.Vector3();
+function pickAt(px,py){
+  const w=innerWidth,h=innerHeight; let best=-1,bd=18*18;
+  for(let i=0;i<N;i++){
+    _v.set(cur[i*3],cur[i*3+1],cur[i*3+2]).project(camera);
+    if(_v.z>1) continue;
+    const sx=(_v.x*0.5+0.5)*w, sy=(0.5-_v.y*0.5)*h;
+    const dx=sx-px,dy=sy-py,d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=i;}
+  }
+  return best;
+}
+
+// ---------------- selection + camera ----------------
+function selectTrope(i){
+  sel=i;
+  const card=document.getElementById('card'); card.classList.add('show');
+  document.getElementById('cTitle').textContent=spaceCase(NAME[i]);
+  document.getElementById('cSub').textContent=
+    `cluster ${CL[i]} · ${MEDIA[i]} · seen ${TOT[i].toLocaleString()}× (film ${NF[i]}, tv ${NT[i]}, lit ${NL[i]})`;
+  const pills=[pill('film '+NF[i],MEDIA_COLORS.film),pill('tv '+NT[i],MEDIA_COLORS.tv),pill('lit '+NL[i],MEDIA_COLORS.lit)];
+  if(G[i]!=null) pills.push(pill('gender '+G[i], G[i]<0?'#8ecae6':'#ff8fab'));
+  document.getElementById('cPills').innerHTML=pills.join('');
+  document.getElementById('cDesc').textContent=DESC[i]||'(no description)';
+  const nb=document.getElementById('nbrs'); nb.innerHTML='';
+  for(const j of NN[i]){const div=document.createElement('div'); div.textContent='→ '+spaceCase(NAME[j]);
+    div.onclick=()=>{selectTrope(j); flyTo(j);}; nb.appendChild(div);}
+  document.getElementById('cLink').href='https://tvtropes.org/pmwiki/pmwiki.php/Main/'+NAME[i];
+  updateSelEdges(); buildSelLabels();
+}
+function deselect(){ sel=-1; document.getElementById('card').classList.remove('show');
+  edgesSel.visible=false; marker.visible=false; clearLabels(); }
+
+let camTween=null;
+function flyTo(i){
+  const t=new THREE.Vector3(cur[i*3],cur[i*3+1],cur[i*3+2]);
+  const dir=new THREE.Vector3().subVectors(camera.position,t);
+  if(dir.lengthSq()<1) dir.set(0,0,1);
+  dir.normalize().multiplyScalar(34);
+  camTween={from:camera.position.clone(), to:t.clone().add(dir), look:t.clone(), t:0};
+}
+
+// ---------------- labels overlay ----------------
+const labelBox=document.getElementById('labels'); let labels=[];
+function clearLabels(){ labels.forEach(l=>l.el.remove()); labels=[]; }
+function buildSelLabels(){
+  clearLabels();
+  const mk=(idx,cls)=>{const el=document.createElement('div'); el.className='lab'+(cls?' '+cls:'');
+    el.textContent=spaceCase(NAME[idx]); labelBox.appendChild(el); labels.push({idx,el});};
+  mk(sel,'sel'); for(const j of NN[sel]) mk(j,'');
+}
+function updateLabels(){
+  if(!labels.length) return; const w=innerWidth,h=innerHeight;
+  for(const l of labels){
+    _v.set(cur[l.idx*3],cur[l.idx*3+1],cur[l.idx*3+2]).project(camera);
+    if(_v.z>1){ l.el.style.display='none'; continue; }
+    l.el.style.display='block';
+    l.el.style.left=((_v.x*0.5+0.5)*w)+'px'; l.el.style.top=((0.5-_v.y*0.5)*h)+'px';
+  }
+}
+
+// ---------------- UI ----------------
+function buildUI(){
+  // axis selects
+  for(const id of ['axX','axY','axZ']){const s=document.getElementById(id);
+    for(const [v,t] of AXIS_OPTIONS){const o=document.createElement('option'); o.value=v; o.textContent=t; s.appendChild(o);} }
+  document.getElementById('axX').value='umap1';
+  document.getElementById('axY').value='umap2';
+  document.getElementById('axZ').value='umap3';
+  for(const id of ['axX','axY','axZ']) document.getElementById(id).onchange=startMorph;
+
+  document.querySelectorAll('#colorModes button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#colorModes button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); colorMode=b.dataset.m; recomputeColors();});
+  document.querySelectorAll('#connModes button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#connModes button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); connMode=b.dataset.k; rebuildAllEdges(); updateSelEdges();});
+  document.querySelectorAll('#navModes button').forEach(b=>b.onclick=()=>setNav(b.dataset.n));
+  document.getElementById('speed').oninput=e=>{fly.movementSpeed=+e.target.value;};
+  document.getElementById('glow').oninput=e=>{glow=e.target.value/100; window._mat.uniforms.uGlow.value=glow;};
+  document.getElementById('reset').onclick=()=>{
+    camTween={from:camera.position.clone(), to:new THREE.Vector3(0,0,135), look:new THREE.Vector3(0,0,0), t:0};};
+
+  // pointer pick (distinguish from drag-look)
+  const cv=renderer.domElement; let down=null;
+  cv.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY,t:Date.now()};});
+  cv.addEventListener('pointerup',e=>{ if(!down) return;
+    const moved=Math.abs(e.clientX-down.x)+Math.abs(e.clientY-down.y);
+    if(moved<8 && Date.now()-down.t<450){ const i=pickAt(e.clientX,e.clientY);
+      if(i>=0) selectTrope(i); else deselect(); }
+    down=null;});
+
+  // search
+  const search=document.getElementById('search'), results=document.getElementById('results');
+  let lower=null;
+  search.oninput=()=>{const q=search.value.trim().toLowerCase(); results.innerHTML=''; if(!q) return;
+    if(!lower) lower=NAME.map(n=>n.toLowerCase());
+    let hits=[]; for(let i=0;i<N&&hits.length<40;i++) if(lower[i].includes(q)) hits.push(i);
+    hits.sort((a,b)=>TOT[b]-TOT[a]);
+    for(const i of hits.slice(0,30)){const dv=document.createElement('div'); dv.textContent=spaceCase(NAME[i]);
+      dv.onclick=()=>{selectTrope(i); flyTo(i);}; results.appendChild(dv);} };
+  window.addEventListener('keydown',e=>{if(e.key==='Escape')deselect();});
+}
+function buildLegend(){
+  const t=document.getElementById('legendTitle'), b=document.getElementById('legendBody');
+  if(colorMode==='cluster'){ t.textContent='Semantic clusters';
+    b.innerHTML=`<div class="lg">${KC} k-means groups · nearby color = related meaning.</div>`; }
+  else if(colorMode==='media'){ t.textContent='Dominant medium';
+    b.innerHTML=['film','tv','lit','unused'].map(k=>`<div class="lg"><span class="sw" style="background:${MEDIA_COLORS[k]}"></span>${k}</div>`).join(''); }
+  else { t.textContent='Genderedness';
+    b.innerHTML='<div class="bar" style="background:linear-gradient(90deg,#f25f5f,#caa,#8ecae6)"></div>'+
+      '<div class="lg" style="justify-content:space-between"><span>male-skewed</span><span>female-skewed</span></div>'+
+      '<div class="lg"><span class="sw" style="background:#52576a"></span>no score</div>'; }
+}
+const pill=(t,c)=>`<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55">${esc(t)}</span>`;
+const esc=s=>(s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+const spaceCase=s=>s.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2');
+
+// ---------------- loop ----------------
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+
+  if(morphing){ let mx=0; for(let k=0;k<cur.length;k++){ const d=tgt[k]-cur[k]; cur[k]+=d*0.12; mx=Math.max(mx,Math.abs(d)); }
+    posAttr.needsUpdate=true; if(mx<0.06){ cur.set(tgt); morphing=false; rebuildAllEdges(); } }
+
+  if(camTween){ camTween.t=Math.min(camTween.t+dt*1.8,1); const k=1-Math.pow(1-camTween.t,3);
+    camera.position.lerpVectors(camTween.from,camTween.to,k); camera.lookAt(camTween.look);
+    if(controls===orbit) orbit.target.copy(camTween.look);
+    if(camTween.t>=1) camTween=null;
+  } else if(controls===fly) fly.update(dt);
+  else orbit.update();
+
+  if(sel>=0 && (morphing||connMode!=='none')) updateSelEdges();
+  updateLabels();
+  renderer.render(scene,camera);
+}
+function resize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); }
+addEventListener('resize',resize); resize();
+</script>
+</body>
+</html>

@@ -17,9 +17,14 @@ WebGL demo.
   `gemini-embedding-2` (768-dim, L2-normalized) via **Vertex AI**.
 - **Layout**: PCA → UMAP (2D & 3D) for the map, KMeans for 24 semantic clusters,
   and an exact k-nearest-neighbor graph in the full embedding space.
-- **Demo**: a single-file WebGL explorer — pan/zoom over all 30,984 points,
-  color by semantic cluster / dominant medium / genderedness, size by popularity,
-  full-text search, and click-to-trace nearest neighbors.
+- **Demo**: two linked single-file WebGL views —
+  - **2D map** (`index.html`): pan/zoom + touch over all 30,984 points, color by
+    semantic cluster / dominant medium / genderedness, size by popularity,
+    full-text search, click-to-trace nearest neighbors.
+  - **3D flythrough** (`3d.html`, Three.js): fly (WASD + look) or orbit through the
+    cloud, render the full neighbor web, and **remap the X/Y/Z axes to any metric**
+    (semantic UMAP axes, film/tv/lit share, popularity, genderedness, cluster) to
+    smoothly regroup the tropes — set Z=flat for a 2D arrangement to compare.
 
 ## Pipeline
 ```
