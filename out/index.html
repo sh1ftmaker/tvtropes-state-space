@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TVTropes State Space</title>
+<style>
+  :root{
+    --bg:#06070d; --panel:rgba(16,18,28,.82); --line:rgba(255,255,255,.08);
+    --txt:#e7e9f3; --dim:#9aa0b8; --accent:#7cf2d6;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font:13px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  #stage{position:fixed;inset:0}
+  canvas{position:absolute;inset:0;display:block}
+  #gl{z-index:1}
+  #fx{z-index:2;pointer-events:none}
+  /* ---- HUD ---- */
+  .hud{position:fixed;z-index:5}
+  #title{top:14px;left:16px;max-width:360px}
+  #title h1{margin:0;font-size:15px;letter-spacing:.3px;font-weight:650}
+  #title p{margin:3px 0 0;color:var(--dim);font-size:11.5px}
+  #title .badge{display:inline-block;margin-top:6px;padding:2px 7px;border:1px solid var(--line);
+    border-radius:20px;color:var(--accent);font-size:10.5px;letter-spacing:.4px}
+  .panel{background:var(--panel);backdrop-filter:blur(9px);border:1px solid var(--line);
+    border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  #controls{top:14px;right:16px;width:222px;padding:13px 14px}
+  #controls h2{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--dim)}
+  .seg{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
+  .seg button{flex:1 1 auto;min-width:54px;padding:5px 6px;border:1px solid var(--line);
+    background:transparent;color:var(--dim);border-radius:7px;cursor:pointer;font-size:11px;transition:.12s}
+  .seg button:hover{color:var(--txt);border-color:rgba(255,255,255,.22)}
+  .seg button.on{background:var(--accent);color:#04130f;border-color:var(--accent);font-weight:600}
+  .row{display:flex;align-items:center;gap:8px;margin:7px 0;color:var(--dim);font-size:11.5px}
+  .row input[type=range]{flex:1;accent-color:var(--accent)}
+  #search{width:100%;padding:7px 9px;background:rgba(0,0,0,.3);border:1px solid var(--line);
+    border-radius:8px;color:var(--txt);font-size:12px;outline:none}
+  #search:focus{border-color:var(--accent)}
+  #results{margin-top:6px;max-height:148px;overflow:auto}
+  #results div{padding:4px 7px;border-radius:6px;cursor:pointer;color:var(--dim);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #results div:hover{background:rgba(255,255,255,.06);color:var(--txt)}
+  #legend{bottom:14px;right:16px;width:222px;padding:11px 13px}
+  #legend h2{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--dim)}
+  .lg{display:flex;align-items:center;gap:7px;margin:3px 0;font-size:11.5px;color:var(--dim)}
+  .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  .bar{height:9px;border-radius:5px;margin:5px 0 2px}
+  /* ---- detail card ---- */
+  #card{bottom:14px;left:16px;width:330px;padding:15px 16px;display:none}
+  #card.show{display:block}
+  #card h3{margin:0 0 2px;font-size:15px;font-weight:650}
+  #card .sub{color:var(--dim);font-size:11px;margin-bottom:9px}
+  #card .desc{color:#c7cbde;font-size:12px;max-height:120px;overflow:auto;margin-bottom:10px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;margin:0 4px 4px 0}
+  #card h4{margin:8px 0 5px;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+  #nbrs div{padding:3px 6px;border-radius:6px;cursor:pointer;color:var(--accent);font-size:11.5px}
+  #nbrs div:hover{background:rgba(124,242,214,.1)}
+  /* ---- hover tooltip ---- */
+  #tip{position:fixed;z-index:8;pointer-events:none;display:none;max-width:260px;
+    padding:8px 11px;background:rgba(8,9,15,.95);border:1px solid var(--line);border-radius:9px;
+    box-shadow:0 6px 22px rgba(0,0,0,.5)}
+  #tip b{font-size:12.5px}
+  #tip p{margin:3px 0 0;color:var(--dim);font-size:11px}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+    background:var(--bg);flex-direction:column;gap:14px}
+  #loading .spin{width:34px;height:34px;border:3px solid rgba(255,255,255,.12);
+    border-top-color:var(--accent);border-radius:50%;animation:s 1s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:5;color:var(--dim);
+    font-size:11px;background:var(--panel);padding:5px 12px;border-radius:20px;border:1px solid var(--line)}
+  a.src{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <canvas id="fx"></canvas>
+</div>
+
+<div id="title" class="hud">
+  <h1>TVTropes State Space</h1>
+  <p>30,984 narrative tropes embedded by meaning &amp; arranged by similarity. Drag to pan, scroll to zoom, hover to inspect, click to trace nearest neighbors.</p>
+  <span class="badge" id="modelBadge">embedding: …</span>
+</div>
+
+<div id="controls" class="hud panel">
+  <h2>Color by</h2>
+  <div class="seg" id="colorModes">
+    <button data-m="cluster" class="on">Semantic</button>
+    <button data-m="media">Media</button>
+    <button data-m="gender">Gender</button>
+  </div>
+  <h2>Size by</h2>
+  <div class="seg" id="sizeModes">
+    <button data-s="pop" class="on">Popularity</button>
+    <button data-s="flat">Uniform</button>
+  </div>
+  <div class="row"><span>Glow</span><input id="glow" type="range" min="0" max="100" value="60"></div>
+  <h2 style="margin-top:6px">Find a trope</h2>
+  <input id="search" placeholder="e.g. ChekhovsGun, BigBad…" autocomplete="off">
+  <div id="results"></div>
+</div>
+
+<div id="legend" class="hud panel">
+  <h2 id="legendTitle">Semantic clusters</h2>
+  <div id="legendBody"></div>
+</div>
+
+<div id="card" class="hud panel">
+  <h3 id="cTitle"></h3>
+  <div class="sub" id="cSub"></div>
+  <div id="cPills"></div>
+  <div class="desc" id="cDesc"></div>
+  <h4>Nearest neighbors</h4>
+  <div id="nbrs"></div>
+  <div style="margin-top:8px"><a class="src" id="cLink" target="_blank" rel="noopener">Open on tvtropes.org ↗</a></div>
+</div>
+
+<div id="tip"></div>
+<div class="hint" id="hint">tip: click a star to trace its semantic neighbors</div>
+<div id="loading"><div class="spin"></div><div>loading the trope universe…</div></div>
+
+<script>
+const PALETTE = ["#7cf2d6","#ff8fab","#ffd166","#8ecae6","#c792ea","#80ed99","#f9844a",
+ "#90caf9","#f78fb3","#b5e48c","#ffadad","#a0c4ff","#fdffb6","#bdb2ff","#9bf6ff","#ffc6ff",
+ "#caffbf","#ffd6a5","#a3c4f3","#f1c0e8","#84dcc6","#ffaaa5","#b8f2e6","#e2c2ff"];
+const MEDIA_COLORS = {film:"#8ecae6", tv:"#ff8fab", lit:"#ffd166", unused:"#566", unus:"#566"};
+const hexRGB = h=>{const n=parseInt(h.slice(1),16);return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];};
+
+let DATA=null, N=0, POS, POS3, COL, SIZE, NAMES, META, NN, GRID;
+let view={s:0.9, tx:0, ty:0}; // world->clip scale & translate
+let colorMode="cluster", sizeMode="pop", glow=0.6, sel=-1, hover=-1;
+let dpr=Math.min(window.devicePixelRatio||1, 2);
+
+const glc=document.getElementById('gl'), fxc=document.getElementById('fx');
+const gl=glc.getContext('webgl2',{antialias:true,premultipliedAlpha:false});
+const fx=fxc.getContext('2d');
+
+// ---------- load ----------
+fetch('points.json').then(r=>r.json()).then(d=>{
+  DATA=d; const P=d.points; N=P.length;
+  POS=new Float32Array(N*2); POS3=new Float32Array(N*3);
+  COL=new Float32Array(N*3); SIZE=new Float32Array(N);
+  NAMES=new Array(N); META=new Array(N); NN=new Array(N);
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  for(let i=0;i<N;i++){const p=P[i];
+    POS[i*2]=p.x; POS[i*2+1]=p.y;
+    POS3[i*3]=p.x3; POS3[i*3+1]=p.y3; POS3[i*3+2]=p.z3;
+    NAMES[i]=p.name; META[i]=p; NN[i]=p.nn;
+    minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);miny=Math.min(miny,p.y);maxy=Math.max(maxy,p.y);
+  }
+  document.getElementById('modelBadge').textContent='embedding: '+(d.meta.model||'?');
+  buildGrid(); initGL(); recomputeColors(); recomputeSizes(); buildLegend();
+  document.getElementById('loading').style.display='none';
+  resize(); requestAnimationFrame(loop);
+  setTimeout(()=>{document.getElementById('hint').style.opacity=0;},6000);
+});
+
+// ---------- spatial grid for picking ----------
+function buildGrid(){
+  const cells=180; GRID={cells,minx:-1.05,miny:-1.05,span:2.1,map:new Map()};
+  for(let i=0;i<N;i++){
+    const cx=Math.floor((POS[i*2]-GRID.minx)/GRID.span*cells);
+    const cy=Math.floor((POS[i*2+1]-GRID.miny)/GRID.span*cells);
+    const k=cx*cells+cy; let a=GRID.map.get(k); if(!a){a=[];GRID.map.set(k,a);} a.push(i);
+  }
+}
+function pick(wx,wy,rad){
+  const {cells,minx,miny,span}=GRID;
+  const cx=Math.floor((wx-minx)/span*cells), cy=Math.floor((wy-miny)/span*cells);
+  let best=-1,bd=rad*rad;
+  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
+    const a=GRID.map.get((cx+dx)*cells+(cy+dy)); if(!a)continue;
+    for(const i of a){const ddx=POS[i*2]-wx,ddy=POS[i*2+1]-wy,d=ddx*ddx+ddy*ddy;
+      if(d<bd){bd=d;best=i;}}
+  }
+  return best;
+}
+
+// ---------- colors / sizes ----------
+function recomputeColors(){
+  let mx=0; for(let i=0;i<N;i++) mx=Math.max(mx,META[i].tot);
+  for(let i=0;i<N;i++){
+    let c;
+    if(colorMode==="cluster"){ c=hexRGB(PALETTE[META[i].c%PALETTE.length]); }
+    else if(colorMode==="media"){ c=hexRGB(MEDIA_COLORS[META[i].media]||"#566"); }
+    else { // gender: diverging  female(-?) <-> male; ratio in [-1,1] (neg=male-skew)
+      const g=META[i].g;
+      if(g==null){ c=[0.32,0.34,0.42]; }
+      else { const t=(g+1)/2; // 0..1
+        c=[0.95-0.55*t, 0.45+0.15*Math.sin(t*3.14), 0.35+0.6*t]; }
+    }
+    COL[i*3]=c[0];COL[i*3+1]=c[1];COL[i*3+2]=c[2];
+  }
+  if(glBuf) gl.bindBuffer(gl.ARRAY_BUFFER,glBuf.col),gl.bufferData(gl.ARRAY_BUFFER,COL,gl.DYNAMIC_DRAW);
+  buildLegend();
+}
+function recomputeSizes(){
+  let mx=0; for(let i=0;i<N;i++) mx=Math.max(mx,META[i].tot);
+  for(let i=0;i<N;i++){
+    if(sizeMode==="pop"){ SIZE[i]=2.0+3.4*Math.log1p(META[i].tot)/Math.log1p(mx); }
+    else SIZE[i]=2.6;
+  }
+  if(glBuf) gl.bindBuffer(gl.ARRAY_BUFFER,glBuf.sz),gl.bufferData(gl.ARRAY_BUFFER,SIZE,gl.DYNAMIC_DRAW);
+}
+
+// ---------- WebGL ----------
+let prog, glBuf={};
+function initGL(){
+  const vs=`#version 300 es
+  in vec2 aPos; in vec3 aCol; in float aSz;
+  uniform vec2 uScale; uniform vec2 uTrans; uniform float uPx; uniform float uHi;
+  uniform int uSel;
+  out vec3 vCol; out float vHi;
+  void main(){
+    vec2 p=aPos*uScale+uTrans;
+    gl_Position=vec4(p,0.,1.);
+    float boost = (gl_VertexID==uSel)?2.6:1.0;
+    gl_PointSize=aSz*uPx*boost;
+    vCol=aCol; vHi=boost;
+  }`;
+  const fsr=`#version 300 es
+  precision mediump float; in vec3 vCol; in float vHi; out vec4 o;
+  uniform float uGlow;
+  void main(){
+    vec2 d=gl_PointCoord-vec2(.5); float r=length(d);
+    if(r>.5) discard;
+    float core=smoothstep(.5,.0,r);
+    float a=core*(.55+.45*uGlow);
+    vec3 c=vCol*(0.7+0.6*core);
+    if(vHi>1.5){ c=mix(c,vec3(1.), .35); a=max(a,.9); }
+    o=vec4(c, a);
+  }`;
+  prog=link(vs,fsr);
+  glBuf.pos=mkbuf(POS); glBuf.col=mkbuf(COL); glBuf.sz=mkbuf(SIZE);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // additive glow
+}
+function mkbuf(arr){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
+  gl.bufferData(gl.ARRAY_BUFFER,arr,gl.DYNAMIC_DRAW);return b;}
+function link(vs,fs){
+  const c=(t,s)=>{const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(sh);return sh;};
+  const p=gl.createProgram();gl.attachShader(p,c(gl.VERTEX_SHADER,vs));
+  gl.attachShader(p,c(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw gl.getProgramInfoLog(p);return p;}
+
+function draw(){
+  gl.viewport(0,0,glc.width,glc.height);
+  gl.clearColor(0.024,0.027,0.051,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(prog);
+  bind('aPos',glBuf.pos,2); bind('aCol',glBuf.col,3); bind('aSz',glBuf.sz,1);
+  const ar=glc.width/glc.height;
+  gl.uniform2f(u('uScale'), view.s/ (ar>1?ar:1), view.s*(ar<1?ar:1));
+  gl.uniform2f(u('uTrans'), view.tx, view.ty);
+  gl.uniform1f(u('uPx'), dpr);
+  gl.uniform1f(u('uGlow'), glow);
+  gl.uniform1f(u('uHi'), 1.0);
+  gl.uniform1i(u('uSel'), sel);
+  gl.drawArrays(gl.POINTS,0,N);
+}
+function bind(name,buf,size){const l=gl.getAttribLocation(prog,name);
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.enableVertexAttribArray(l);
+  gl.vertexAttribPointer(l,size,gl.FLOAT,false,0,0);}
+function u(n){return gl.getUniformLocation(prog,n);}
+
+// ---------- overlay (selection lines, labels) ----------
+function world2screen(wx,wy){
+  const ar=glc.width/glc.height;
+  const sx=(wx*view.s/(ar>1?ar:1)+view.tx), sy=(wy*view.s*(ar<1?ar:1)+view.ty);
+  return [ (sx*0.5+0.5)*fxc.width/dpr, (0.5-sy*0.5)*fxc.height/dpr ];
+}
+function drawFX(){
+  fx.clearRect(0,0,fxc.width,fxc.height); fx.save(); fx.scale(dpr,dpr);
+  if(sel>=0){
+    const [sxX,sxY]=world2screen(POS[sel*2],POS[sel*2+1]);
+    fx.lineWidth=1;
+    for(const j of NN[sel]){
+      const [x,y]=world2screen(POS[j*2],POS[j*2+1]);
+      fx.strokeStyle='rgba(124,242,214,.45)'; fx.beginPath();
+      fx.moveTo(sxX,sxY); fx.lineTo(x,y); fx.stroke();
+      label(x,y,NAMES[j],'rgba(231,233,243,.92)');
+    }
+    fx.fillStyle='#fff'; fx.beginPath(); fx.arc(sxX,sxY,5,0,7); fx.fill();
+    label(sxX,sxY-2,NAMES[sel],'#7cf2d6',true);
+  }
+  fx.restore();
+}
+function label(x,y,t,col,big){
+  fx.font=(big?'600 13px':'12px')+' ui-sans-serif,system-ui';
+  const w=fx.measureText(t).width;
+  fx.fillStyle='rgba(6,7,13,.7)'; fx.fillRect(x+7,y-9,w+8,16);
+  fx.fillStyle=col; fx.fillText(t,x+11,y+3);
+}
+
+// ---------- render loop ----------
+let dirty=true;
+function loop(){ if(dirty){ draw(); dirty=false; } drawFX(); requestAnimationFrame(loop); }
+function invalidate(){dirty=true;}
+
+// ---------- interaction ----------
+let drag=null;
+glc.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,tx:view.tx,ty:view.ty,moved:0};});
+window.addEventListener('mouseup',e=>{
+  if(drag&&drag.moved<4){ // treat as click
+    const i=pickAt(e.clientX,e.clientY); if(i>=0) selectTrope(i); else deselect();
+  }
+  drag=null;
+});
+window.addEventListener('mousemove',e=>{
+  if(drag){ const ar=glc.width/glc.height;
+    drag.moved+=Math.abs(e.movementX)+Math.abs(e.movementY);
+    view.tx=drag.tx+(e.clientX-drag.x)/ (fxc.width/dpr) *2;
+    view.ty=drag.ty-(e.clientY-drag.y)/ (fxc.height/dpr) *2;
+    invalidate();
+  } else {
+    const i=pickAt(e.clientX,e.clientY); hoverTrope(i,e.clientX,e.clientY);
+  }
+});
+glc.addEventListener('wheel',e=>{e.preventDefault();
+  const f=Math.exp(-e.deltaY*0.0012);
+  // zoom toward cursor
+  const r=glc.getBoundingClientRect();
+  const cx=( (e.clientX-r.left)/r.width*2-1 );
+  const cy=-( (e.clientY-r.top)/r.height*2-1 );
+  view.tx=cx-(cx-view.tx)*f; view.ty=cy-(cy-view.ty)*f;
+  view.s*=f; invalidate();
+},{passive:false});
+
+function screen2world(px,py){
+  const r=glc.getBoundingClientRect(); const ar=glc.width/glc.height;
+  let sx=((px-r.left)/r.width*2-1), sy=-((py-r.top)/r.height*2-1);
+  const wx=(sx-view.tx)/(view.s/(ar>1?ar:1));
+  const wy=(sy-view.ty)/(view.s*(ar<1?ar:1));
+  return [wx,wy];
+}
+function pickAt(px,py){const [wx,wy]=screen2world(px,py); return pick(wx,wy, 0.02/view.s + 0.006);}
+
+const tip=document.getElementById('tip');
+function hoverTrope(i,px,py){
+  hover=i;
+  if(i<0){tip.style.display='none';glc.style.cursor='grab';return;}
+  glc.style.cursor='pointer';
+  const m=META[i];
+  tip.innerHTML='<b>'+esc(NAMES[i])+'</b><p>'+esc(m.d||'')+'</p>';
+  tip.style.display='block';
+  const w=tip.offsetWidth,h=tip.offsetHeight;
+  tip.style.left=Math.min(px+14, innerWidth-w-8)+'px';
+  tip.style.top=Math.min(py+14, innerHeight-h-8)+'px';
+}
+
+function selectTrope(i){
+  sel=i; invalidate();
+  const m=META[i];
+  document.getElementById('card').classList.add('show');
+  document.getElementById('cTitle').textContent=spaceCase(NAMES[i]);
+  document.getElementById('cSub').textContent=
+    `cluster ${m.c} · ${m.media} · seen ${m.tot.toLocaleString()}× (film ${m.nf}, tv ${m.nt}, lit ${m.nl})`;
+  const pills=[];
+  pills.push(pill('film '+m.nf, MEDIA_COLORS.film));
+  pills.push(pill('tv '+m.nt, MEDIA_COLORS.tv));
+  pills.push(pill('lit '+m.nl, MEDIA_COLORS.lit));
+  if(m.g!=null) pills.push(pill('gender '+m.g, m.g<0?'#8ecae6':'#ff8fab'));
+  document.getElementById('cPills').innerHTML=pills.join('');
+  document.getElementById('cDesc').textContent=m.d||'(no description)';
+  const nb=document.getElementById('nbrs'); nb.innerHTML='';
+  for(const j of NN[i]){const div=document.createElement('div');
+    div.textContent='→ '+spaceCase(NAMES[j]);
+    div.onclick=()=>{selectTrope(j); flyTo(j);}; nb.appendChild(div);}
+  document.getElementById('cLink').href='https://tvtropes.org/pmwiki/pmwiki.php/Main/'+NAMES[i];
+}
+function deselect(){sel=-1;document.getElementById('card').classList.remove('show');invalidate();}
+function flyTo(i){ // ease view so point near center
+  const tx0=view.tx,ty0=view.ty, ar=glc.width/glc.height;
+  const tgx=-POS[i*2]*(view.s/(ar>1?ar:1)), tgy=-POS[i*2+1]*(view.s*(ar<1?ar:1));
+  let t=0; (function an(){t+=0.08; const k=t<1?1-Math.pow(1-t,3):1;
+    view.tx=tx0+(tgx-tx0)*k; view.ty=ty0+(tgy-ty0)*k; invalidate();
+    if(t<1)requestAnimationFrame(an);})();
+}
+const pill=(t,c)=>`<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55">${esc(t)}</span>`;
+const esc=s=>(s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+const spaceCase=s=>s.replace(/([a-z0-9])([A-Z])/g,'$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2');
+
+// ---------- controls ----------
+document.querySelectorAll('#colorModes button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#colorModes button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); colorMode=b.dataset.m; recomputeColors(); invalidate();
+});
+document.querySelectorAll('#sizeModes button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#sizeModes button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); sizeMode=b.dataset.s; recomputeSizes(); invalidate();
+});
+document.getElementById('glow').oninput=e=>{glow=e.target.value/100; invalidate();};
+
+const search=document.getElementById('search'), results=document.getElementById('results');
+let lowerNames=null;
+search.oninput=()=>{
+  const q=search.value.trim().toLowerCase(); results.innerHTML='';
+  if(!q)return; if(!lowerNames) lowerNames=NAMES.map(n=>n.toLowerCase());
+  let hits=[]; for(let i=0;i<N&&hits.length<40;i++) if(lowerNames[i].includes(q)) hits.push(i);
+  hits.sort((a,b)=>META[b].tot-META[a].tot);
+  for(const i of hits.slice(0,30)){const d=document.createElement('div');
+    d.textContent=spaceCase(NAMES[i]); d.onclick=()=>{selectTrope(i);flyTo(i);}; results.appendChild(d);}
+};
+
+// ---------- legend ----------
+function buildLegend(){
+  const t=document.getElementById('legendTitle'), b=document.getElementById('legendBody');
+  if(colorMode==='cluster'){ t.textContent='Semantic clusters';
+    b.innerHTML='<div class="lg">'+ (DATA?DATA.meta.clusters:24) +' k-means groups in embedding space.</div>'+
+      '<div class="lg">Nearby color = related meaning.</div>'; }
+  else if(colorMode==='media'){ t.textContent='Dominant medium';
+    b.innerHTML=['film','tv','lit','unused'].map(k=>
+      `<div class="lg"><span class="sw" style="background:${MEDIA_COLORS[k]}"></span>${k}</div>`).join(''); }
+  else { t.textContent='Genderedness';
+    b.innerHTML='<div class="bar" style="background:linear-gradient(90deg,#f25f5f,#caa,#8ecae6)"></div>'+
+      '<div class="lg" style="justify-content:space-between"><span>male-skewed</span><span>female-skewed</span></div>'+
+      '<div class="lg"><span class="sw" style="background:#52576a"></span>no score</div>'; }
+}
+
+// ---------- resize ----------
+function resize(){
+  const w=innerWidth,h=innerHeight;
+  for(const c of [glc,fxc]){c.width=w*dpr;c.height=h*dpr;c.style.width=w+'px';c.style.height=h+'px';}
+  invalidate();
+}
+window.addEventListener('resize',resize);
+window.addEventListener('keydown',e=>{if(e.key==='Escape')deselect();});
+</script>
+</body>
+</html>

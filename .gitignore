@@ -1,0 +1,25 @@
+# secrets (NEVER commit)
+sa.json
+secret.key
+*.key
+*service_account*.json
+.env
+
+# large data: 659MB zip + ~1.5GB extracted CSVs + cloned repo
+data/
+
+# generated artifacts (88MB matrix, 30k per-id cache, served copy)
+out/embeddings_gemini.npz
+out/embeddings_gemini.json
+out/embeddings_local.npz
+out/embeddings_gemini_cache/
+out/_smoke.npz
+out/_smoke.json
+out/_smoke_cache/
+out/points.json
+
+# tooling
+__pycache__/
+*.pyc
+.playwright-mcp/
+.DS_Store
